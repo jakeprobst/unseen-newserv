@@ -961,15 +961,11 @@ static bool drop_item(
 
     // If the game is not BB, forward the request to the leader instead of
     // generating the item drop command
-  } else if (s->drops_enabled == true)
-      {
-          return false;
-      }
-      if  (s->drops_enabled == false)
-      {
-          return true; //Return before items are generated
-      }
+  } else if (s->drops_enabled == false) {
+      return true; //Return before items are generated
   }
+      return false;
+}
 
   item.data.id = l->generate_item_id(0xFF);
 
@@ -980,7 +976,7 @@ static bool drop_item(
   return true;
 }
 
-static void on_enemy_drop_item_request(shared_ptr<ServerState>s,
+static void on_enemy_drop_item_request(shared_ptr<ServerState> s,
     shared_ptr<Lobby> l, shared_ptr<Client> c, uint8_t command, uint8_t flag,
     const string& data) {
   if (!l->is_game()) {
