@@ -991,7 +991,7 @@ static void on_enemy_drop_item_request(shared_ptr<ServerState>s,
   const auto& cmd = check_size_sc<G_EnemyDropItemRequest_DC_6x60>(data,
       sizeof(G_EnemyDropItemRequest_DC_6x60),
       sizeof(G_EnemyDropItemRequest_PC_V3_BB_6x60));
-  if (!drop_item(s,l, cmd.enemy_id, cmd.area, cmd.x, cmd.z, cmd.enemy_id)) {
+  if (!drop_item(s, l, cmd.enemy_id, cmd.area, cmd.x, cmd.z, cmd.enemy_id)) {
     forward_subcommand(l, c, command, flag, data);
   }
 }
@@ -1004,7 +1004,7 @@ static void on_box_drop_item_request(shared_ptr<ServerState>s,
   }
 
   const auto& cmd = check_size_sc<G_BoxItemDropRequest_6xA2>(data);
-  if (!drop_item(s,l, -1, cmd.area, cmd.x, cmd.z, cmd.request_id)) {
+  if (!drop_item(s, l, -1, cmd.area, cmd.x, cmd.z, cmd.request_id)) {
     forward_subcommand(l, c, command, flag, data);
   }
 }
