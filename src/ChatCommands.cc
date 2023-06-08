@@ -255,7 +255,7 @@ static void server_command_patch(shared_ptr<ServerState> s, shared_ptr<Lobby>,
     shared_ptr<Client> c, const std::u16string& args) {
   string basename = encode_sjis(args);
   try {
-    prepare_client_for_patches(s->function_code_index, c, [s, wc = weak_ptr<Client>(c), basename]() {
+      prepare_client_for_patches(s, c, [s, wc = weak_ptr<Client>(c), basename]() {
       auto c = wc.lock();
       if (!c) {
         return;
@@ -527,7 +527,7 @@ static void server_command_lobby_type(shared_ptr<ServerState> s, shared_ptr<Lobb
 
   for (size_t x = 0; x < l->max_clients; x++) {
     if (l->clients[x]) {
-      send_join_lobby(l->clients[x], l, s->function_code_index);
+        send_join_lobby(l->clients[x], l);
     }
   }
 }
