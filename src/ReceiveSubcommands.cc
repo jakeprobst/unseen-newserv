@@ -977,7 +977,6 @@ static bool drop_item(
     l->add_item(item, area, x, z);
   }
   send_drop_item(l, item.data, (enemy_id >= 0), area, x, z, request_id);
-
   return true;
 }
 
