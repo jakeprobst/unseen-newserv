@@ -961,8 +961,7 @@ static bool drop_item(
 
     // If the game is not BB, forward the request to the leader instead of
     // generating the item drop command
-  } else {
-      if (s->drops_enabled == true)
+  } else if (s->drops_enabled == true)
       {
           return false;
       }
