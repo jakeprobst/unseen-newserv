@@ -1164,7 +1164,7 @@ static void server_command_drop(shared_ptr<ServerState>, shared_ptr<Lobby> l,
 
     l->flags ^= Lobby::Flag::DROPS_ENABLED;
     send_text_message_printf(l, "Drops %s",
-        (l->flags & Lobby::Flag::DROPS_ENABLED) ? "enabled" : "disabled");
+    (l->flags & Lobby::Flag::DROPS_ENABLED) ? "enabled" : "disabled");
 }
 
 static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
