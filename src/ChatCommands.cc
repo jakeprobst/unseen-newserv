@@ -509,7 +509,7 @@ static void server_command_lobby_event_all(shared_ptr<ServerState> s, shared_ptr
   }
 }
 
-static void server_command_lobby_type(shared_ptr<ServerState> s, shared_ptr<Lobby> l,
+static void server_command_lobby_type(shared_ptr<ServerState>, shared_ptr<Lobby> l,
     shared_ptr<Client> c, const std::u16string& args) {
   check_is_game(l, false);
   check_privileges(c, Privilege::CHANGE_EVENT);
