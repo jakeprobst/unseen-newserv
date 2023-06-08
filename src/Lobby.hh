@@ -29,6 +29,7 @@ struct Lobby : public std::enable_shared_from_this<Lobby> {
 
     // Flags used only for games
     CHEATS_ENABLED = 0x00000100,
+    DROPS_ENABLED = 0x00000150,
     QUEST_IN_PROGRESS = 0x00000200,
     BATTLE_IN_PROGRESS = 0x00000400,
     JOINABLE_QUEST_IN_PROGRESS = 0x00000800,

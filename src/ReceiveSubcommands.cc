@@ -961,7 +961,14 @@ static bool drop_item(
     // If the game is not BB, forward the request to the leader instead of
     // generating the item drop command
   } else {
-    return false;
+      if (!(l->flags & Lobby::Flag::DROPS_ENABLED))
+      {
+          return true; //Return before items are generated
+      }
+      else
+      {
+          return false;
+      }
   }
 
   item.data.id = l->generate_item_id(0xFF);
@@ -970,6 +977,7 @@ static bool drop_item(
     l->add_item(item, area, x, z);
   }
   send_drop_item(l, item.data, (enemy_id >= 0), area, x, z, request_id);
+
   return true;
 }
 
