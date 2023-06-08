@@ -936,6 +936,7 @@ static void on_sort_inventory_bb(shared_ptr<ServerState>,
 // EXP/Drop Item commands
 
 static bool drop_item(
+    std::shared_ptr<ServerState>s,
     std::shared_ptr<Lobby> l,
     int64_t enemy_id,
     uint8_t area,
@@ -961,13 +962,13 @@ static bool drop_item(
     // If the game is not BB, forward the request to the leader instead of
     // generating the item drop command
   } else {
-      if (!(l->flags & Lobby::Flag::DROPS_ENABLED))
-      {
-          return true; //Return before items are generated
-      }
-      else
+      if (s->drops_enabled == true)
       {
           return false;
+      }
+      if  (s->drops_enabled == false)
+      {
+          return true; //Return before items are generated
       }
   }
 
@@ -977,10 +978,11 @@ static bool drop_item(
     l->add_item(item, area, x, z);
   }
   send_drop_item(l, item.data, (enemy_id >= 0), area, x, z, request_id);
+
   return true;
 }
 
-static void on_enemy_drop_item_request(shared_ptr<ServerState>,
+static void on_enemy_drop_item_request(shared_ptr<ServerState>s,
     shared_ptr<Lobby> l, shared_ptr<Client> c, uint8_t command, uint8_t flag,
     const string& data) {
   if (!l->is_game()) {
@@ -990,12 +992,12 @@ static void on_enemy_drop_item_request(shared_ptr<ServerState>,
   const auto& cmd = check_size_sc<G_EnemyDropItemRequest_DC_6x60>(data,
       sizeof(G_EnemyDropItemRequest_DC_6x60),
       sizeof(G_EnemyDropItemRequest_PC_V3_BB_6x60));
-  if (!drop_item(l, cmd.enemy_id, cmd.area, cmd.x, cmd.z, cmd.enemy_id)) {
+  if (!drop_item(s,l, cmd.enemy_id, cmd.area, cmd.x, cmd.z, cmd.enemy_id)) {
     forward_subcommand(l, c, command, flag, data);
   }
 }
 
-static void on_box_drop_item_request(shared_ptr<ServerState>,
+static void on_box_drop_item_request(shared_ptr<ServerState>s,
     shared_ptr<Lobby> l, shared_ptr<Client> c, uint8_t command, uint8_t flag,
     const string& data) {
   if (!l->is_game()) {
@@ -1003,7 +1005,7 @@ static void on_box_drop_item_request(shared_ptr<ServerState>,
   }
 
   const auto& cmd = check_size_sc<G_BoxItemDropRequest_6xA2>(data);
-  if (!drop_item(l, -1, cmd.area, cmd.x, cmd.z, cmd.request_id)) {
+  if (!drop_item(s,l, -1, cmd.area, cmd.x, cmd.z, cmd.request_id)) {
     forward_subcommand(l, c, command, flag, data);
   }
 }
