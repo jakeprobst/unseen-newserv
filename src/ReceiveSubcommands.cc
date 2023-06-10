@@ -943,14 +943,13 @@ static bool drop_item(
     float z,
     uint16_t request_id) {
 
-    std::shared_ptr<ServerState> s;
-    PlayerInventoryItem item;
+  PlayerInventoryItem item;
 
-    // If the game is BB, run the rare + common drop logic
-    if (l->version == GameVersion::BB) {
-        if (!l->item_creator.get()) {
-            throw runtime_error("received box drop subcommand without item creator present");
-        }
+  // If the game is BB, run the rare + common drop logic
+  if (l->version == GameVersion::BB) {
+    if (!l->item_creator.get()) {
+      throw runtime_error("received box drop subcommand without item creator present");
+    }
 
         if (enemy_id >= 0) {
             item.data = l->item_creator->on_monster_item_drop(
