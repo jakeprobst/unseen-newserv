@@ -950,21 +950,21 @@ static bool drop_item(
     if (!l->item_creator.get()) {
       throw runtime_error("received box drop subcommand without item creator present");
     }
-
-        if (enemy_id >= 0) {
-            item.data = l->item_creator->on_monster_item_drop(
-                l->enemies.at(enemy_id).rt_index, area);
-        }
-        else {
-            item.data = l->item_creator->on_box_item_drop(area);
-        }
-        // If the game is not BB, forward the request to the leader instead of
-        // generating the item drop command
-    }  if (!(l->flags & Lobby::Flag::DROPS_ENABLED)) {
-        return true; // Return before item generation
+    if (enemy_id >= 0) {
+      item.data = l->item_creator->on_monster_item_drop(
+          l->enemies.at(enemy_id).rt_index, area);
     } else {
-        return false;
+      item.data = l->item_creator->on_box_item_drop(area);
     }
+  } else {
+    // If the game is not BB, forward the request to the leader instead of
+    // generating the item drop command
+    if (!(l->flags & Lobby::Flag::DROPS_ENABLED)) {
+      return true; // don't forward to leader if drops are disabled
+    } else {
+      return false;
+    }
+  }
 
   item.data.id = l->generate_item_id(0xFF);
 
