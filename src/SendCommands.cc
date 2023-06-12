@@ -1689,6 +1689,13 @@ void send_join_lobby(shared_ptr<Client> c, shared_ptr<Lobby> l,
                     [c](uint32_t, uint32_t) -> void {
                         c->log.info("applied gibbles patch");
                     });
+
+                auto magsync = fci->get_patch("MaxMagSync", c->specific_version);
+                send_function_call(c, magsync);
+                c->function_call_response_queue.emplace_back(
+                    [c](uint32_t, uint32_t) -> void {
+                        c->log.info("applied MaxMagSync patch");
+                    });
                 });
         }
         catch (const exception& e) {
