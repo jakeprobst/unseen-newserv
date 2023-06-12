@@ -29,10 +29,15 @@ start:
     # r6 contains pointer to equipped mag
     lwz r6, [r5 + 0xd08]
 
+    # skip if mag is null
+    cmpwi r6, 0
+    beq skip
+
     # 120 is max mag syncro
     li r3, 120
     # 0x19a is the syncro offset
     sth [r6 + 0x19a], r3
 
+skip:
     mtlr r7
     blr
