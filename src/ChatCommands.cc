@@ -1165,6 +1165,47 @@ static void server_command_drop(shared_ptr<ServerState>, shared_ptr<Lobby> l,
   send_text_message_printf(l, "Drops %s", (l->flags & Lobby::Flag::DROPS_ENABLED) ? "enabled" : "disabled");
 }
 
+static void server_command_restore(shared_ptr<ServerState>, shared_ptr<Lobby> l,
+    shared_ptr<Client> c, const std::u16string&) {
+    check_is_game(l, true);
+    auto& inv = c->game_data.player()->inventory;
+    size_t count = min<uint8_t>(inv.num_items, 30);
+    
+    for (size_t x = 0; x < count; x++) {
+    if (inv.items[x].data.data1[0] == 0x03 && inv.items[x].data.data1[1] < 0x09 && inv.items[x].data.data1[5] < 0x0A) {
+        
+       PlayerInventoryItem item;
+       item.data.data1[0] = inv.items[x].data.data1[0];
+       item.data.data1[1] = inv.items[x].data.data1[1]; //Copies relevant inventory item data.
+       item.data.data1[2] = inv.items[x].data.data1[2];
+       item.data.data1[5] = 0x0A - inv.items[x].data.data1[5]; //Compares inventory stack amount.
+
+       item.data.id = l->generate_item_id(c->lobby_client_id);
+       l->add_item(item, c->area, c->x, c->z);
+       send_drop_stacked_item(l, item.data, c->area, c->x, c->z);
+       } 
+    } for (int x = 0; x < 3; x++) {
+        
+        PlayerInventoryItem item;
+        item.data.data1[0] = 0x03; //Scapedolls
+        item.data.data1[1] = 0x09;
+        item.data.id = l->generate_item_id(c->lobby_client_id);
+
+        l->add_item(item, c->area, c->x, c->z);
+        send_drop_stacked_item(l, item.data, c->area, c->x + 10, c->z + 10);
+    }
+        PlayerInventoryItem item;
+        item.data.data1[0] = 0x04; //Meseta
+        item.data.data2[0] = 0x3F;
+        item.data.data2[1] = 0x42;
+        item.data.data2[2] = 0x0F;
+        item.data.id = l->generate_item_id(c->lobby_client_id);
+
+        l->add_item(item, c->area, c->x, c->z);
+        send_drop_stacked_item(l, item.data, c->area, c->x - 10, c->z - 10);
+        send_text_message(c, u"Items restored.");
+}
+
 static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
     shared_ptr<Client> c, const std::u16string& args) {
   check_is_game(l, true);
@@ -1307,6 +1348,7 @@ static const unordered_map<u16string, ChatCommandDefinition> chat_commands({
     {u"$lower", {server_command_lower_hp, nullptr, u"Usage:\nLowers HP to 3"}},
     {u"$lobby", {server_command_questburst, nullptr, u"Usage:\nExit quest to lobby"}},
     {u"$drop", {server_command_drop, nullptr, u"Usage:\nToggles drops"}},
+    {u"$restore", {server_command_restore, nullptr, u"Usage:\nToggles drops"}},
 });
 
 struct SplitCommand {
