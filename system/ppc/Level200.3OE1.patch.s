@@ -32,6 +32,5 @@ start:
     lis r3, 0x0FFF
     stw [r6 + 0x1c], r3
 
-skip:
     mtlr r7
     blr
