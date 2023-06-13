@@ -1194,8 +1194,20 @@ static void server_command_drop(shared_ptr<ServerState>, shared_ptr<Lobby> l,
   send_text_message_printf(l, "Drops %s", (l->flags & Lobby::Flag::DROPS_ENABLED) ? "enabled" : "disabled");
 }
 
-static void server_command_item(
-    shared_ptr<ServerState> s, shared_ptr<Lobby> l, shared_ptr<Client> c, const std::u16string& args) {
+static void server_command_levelup(shared_ptr<ServerState> s, shared_ptr<Lobby>,
+    shared_ptr<Client> c, const std::u16string&) {
+  prepare_client_for_patches(s->function_code_index, c, [s, c]() -> void {
+    auto level200 = s->function_code_index->get_patch("Level200", c->specific_version);
+    send_function_call(c, level200);
+    c->function_call_response_queue.emplace_back(
+      [c](uint32_t, uint32_t) -> void {
+        c->log.info("applied level200!");
+    });
+  });
+}
+
+static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
+    shared_ptr<Client> c, const std::u16string& args) {
   check_is_game(l, true);
   check_cheats_enabled(s, l);
 
@@ -1307,6 +1319,7 @@ static const unordered_map<u16string, ChatCommandDefinition> chat_commands({
     // unseen commands
     {u"$lower", {server_command_lower_hp, nullptr}},
     {u"$lobby", {server_command_questburst, nullptr}},
+    {u"$levelup", {server_command_levelup, nullptr}},
 });
 
 struct SplitCommand {
