@@ -1206,6 +1206,54 @@ static void server_command_levelup(shared_ptr<ServerState> s, shared_ptr<Lobby>,
   });
 }
 
+static void server_command_matplan(shared_ptr<ServerState> s, shared_ptr<Lobby>,
+    shared_ptr<Client> c, const std::u16string&) {
+  // hp tp pow mind evade def luck
+  static const uint32_t material_lookup[12][7] {
+    {125, 125, 83, 0, 0, 76, 45},  //humar 5/144/51/0
+    {125, 125, 105, 0, 0, 0, 45},  //hunewearl 5/92/103/0
+    {125, 0, 105, 0, 0, 0, 45},  //hucast 5/130/65/0
+    {125, 125, 105, 45, 0, 55, 45},  //ramar 5/122/38/35
+    {125, 0, 105, 0, 0, 0, 45},  //racast 9/141/50/0
+    {125, 0, 105, 0, 0, 0, 45},  //racaseal 59/95/46/0
+    {125, 125, 56, 51, 27, 71, 45},  //fomarl 5/20/51/124
+    {125, 125, 0, 105, 0, 0, 45},  //fonewm 5/91/104/0 & 5/0/104/91
+    {125, 125, 50, 37, 0, 18, 45},  //fonewearl 5/0/105/95
+    {125, 0, 105, 0, 0, 0, 45},  //hucaseal 38/95/67/0
+    {125, 125, 105, 100, 0, 0, 45},  //ramarl 5/96/49/50
+    {125, 125, 105, 49, 0, 51, 45},  //fomar 5/20/49/126
+  };
+
+  auto char_class = c->game_data.player(true)->disp.char_class;
+  auto level = c->game_data.player(true)->disp.level;
+  auto stats = s->level_table->stats_at_level(char_class, level);
+
+  const std::unordered_map<string, uint32_t> matcount {
+    {"hp", material_lookup[char_class][0]},
+    {"tp", material_lookup[char_class][1]},
+    {"power", material_lookup[char_class][2]},
+    {"mind", material_lookup[char_class][3]},
+    {"evade", material_lookup[char_class][4]},
+    {"def", material_lookup[char_class][5]},
+    {"luck", material_lookup[char_class][6]},
+
+    {"atp", stats.atp + material_lookup[char_class][2]*2 },
+    {"mst", stats.mst + material_lookup[char_class][3]*2 },
+    {"evp", stats.evp + material_lookup[char_class][4]*2 },
+    {"dfp", stats.dfp + material_lookup[char_class][5]*2 },
+    {"lck", stats.lck + material_lookup[char_class][6]*2 },
+  };
+
+  prepare_client_for_patches(s->function_code_index, c, [s, c, matcount]() -> void {
+    auto matplan = s->function_code_index->get_patch("MatPlan", c->specific_version);
+    send_function_call(c, matplan, matcount);
+    c->function_call_response_queue.emplace_back(
+      [c](uint32_t, uint32_t) -> void {
+        c->log.info("applied matplan!");
+    });
+  });
+}
+
 static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
     shared_ptr<Client> c, const std::u16string& args) {
   check_is_game(l, true);
@@ -1320,6 +1368,7 @@ static const unordered_map<u16string, ChatCommandDefinition> chat_commands({
     {u"$lower", {server_command_lower_hp, nullptr}},
     {u"$lobby", {server_command_questburst, nullptr}},
     {u"$levelup", {server_command_levelup, nullptr}},
+    {u"$matplan", {server_command_matplan, nullptr}},
 });
 
 struct SplitCommand {

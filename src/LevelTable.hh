@@ -44,6 +44,7 @@ public:
 
   const PlayerStats& base_stats_for_class(uint8_t char_class) const;
   const LevelStats& stats_for_level(uint8_t char_class, uint8_t level) const;
+  const PlayerStats stats_at_level(uint8_t char_class, uint8_t level) const;
 
 private:
   std::shared_ptr<const std::string> data;
