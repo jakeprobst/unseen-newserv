@@ -29,6 +29,7 @@ ServerState::ServerState(const char* config_filename, bool is_replay)
       catch_handler_exceptions(true),
       ep3_behavior_flags(0),
       run_shell_behavior(RunShellBehavior::DEFAULT),
+      cheat_mode_behavior(CheatModeBehavior::OFF_BY_DEFAULT),
       ep3_card_auction_points(0),
       ep3_card_auction_min_size(0),
       ep3_card_auction_max_size(0),
@@ -745,6 +746,20 @@ void ServerState::parse_config(shared_ptr<const JSONObject> config_json) {
   }
 
   try {
+    const string& behavior = d.at("CheatModeBehavior")->as_string();
+    if (behavior == "Off") {
+      this->cheat_mode_behavior = CheatModeBehavior::OFF;
+    } else if (behavior == "OffByDefault") {
+      this->cheat_mode_behavior = CheatModeBehavior::OFF_BY_DEFAULT;
+    } else if (behavior == "OnByDefault") {
+      this->cheat_mode_behavior = CheatModeBehavior::ON_BY_DEFAULT;
+    } else {
+      throw runtime_error("invalid value for CheatModeBehavior");
+    }
+  } catch (const out_of_range&) {
+  }
+
+  try {
     auto v = d.at("LobbyEvent");
     uint8_t event = v->is_int() ? v->as_int() : event_for_name(v->as_string());
     this->pre_lobby_event = event;
@@ -847,9 +862,14 @@ void ServerState::load_item_tables() {
   }
 
   config_log.info("Loading item definition table");
-  shared_ptr<string> data(new string(prs_decompress(load_file(
+  shared_ptr<string> pmt_data(new string(prs_decompress(load_file(
       "system/blueburst/ItemPMT.prs"))));
-  this->item_parameter_table.reset(new ItemParameterTable(data));
+  this->item_parameter_table.reset(new ItemParameterTable(pmt_data));
+
+  config_log.info("Loading mag evolution table");
+  shared_ptr<string> mag_data(new string(prs_decompress(load_file(
+      "system/blueburst/ItemMagEdit.prs"))));
+  this->mag_evolution_table.reset(new MagEvolutionTable(mag_data));
 }
 
 void ServerState::load_ep3_data() {

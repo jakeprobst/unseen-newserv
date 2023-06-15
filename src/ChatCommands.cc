@@ -70,6 +70,15 @@ static void check_is_ep3(shared_ptr<Client> c, bool is_ep3) {
   }
 }
 
+static void check_cheats_enabled(shared_ptr<ServerState> s, shared_ptr<Lobby> l = nullptr) {
+  if (s->cheat_mode_behavior == ServerState::CheatModeBehavior::OFF) {
+    throw precondition_failed(u"$C6Cheats are disabled.");
+  }
+  if (l && !(l->flags & Lobby::Flag::CHEATS_ENABLED)) {
+    throw precondition_failed(u"$C6This command can\nonly be used in\ncheat mode.");
+  }
+}
+
 static void check_is_leader(shared_ptr<Lobby> l, shared_ptr<Client> c) {
   if (l->leader_id != c->lobby_client_id) {
     throw precondition_failed(u"$C6This command can\nonly be used by\nthe game leader.");
@@ -345,6 +354,7 @@ static void server_command_exit(shared_ptr<ServerState> s, shared_ptr<Lobby> l,
     } else if (l->flags & (Lobby::Flag::QUEST_IN_PROGRESS | Lobby::Flag::JOINABLE_QUEST_IN_PROGRESS)) {
       G_UnusedHeader cmd = {0x73, 0x01, 0x0000};
       c->channel.send(0x60, 0x00, cmd);
+      c->area = 0;
     } else {
       send_text_message(c, u"$C6You must return to\nthe lobby first");
     }
@@ -432,16 +442,21 @@ static void proxy_command_send_server(shared_ptr<ServerState>,
 ////////////////////////////////////////////////////////////////////////////////
 // Lobby commands
 
-static void server_command_cheat(shared_ptr<ServerState>, shared_ptr<Lobby> l,
+static void server_command_cheat(shared_ptr<ServerState> s, shared_ptr<Lobby> l,
     shared_ptr<Client> c, const std::u16string&) {
   check_is_game(l, true);
   check_is_leader(l, c);
+
+  if (s->cheat_mode_behavior == ServerState::CheatModeBehavior::OFF) {
+    send_text_message(c, u"$C6Cheat mode cannot\nbe enabled on this\nserver");
+    return;
+  }
 
   l->flags ^= Lobby::Flag::CHEATS_ENABLED;
   send_text_message_printf(l, "Cheat mode %s",
       (l->flags & Lobby::Flag::CHEATS_ENABLED) ? "enabled" : "disabled");
 
-  // if cheat mode was disabled, turn off all the cheat features that were on
+  // If cheat mode was disabled, turn off all the cheat features that were on
   if (!(l->flags & Lobby::Flag::CHEATS_ENABLED)) {
     for (size_t x = 0; x < l->max_clients; x++) {
       auto c = l->clients[x];
@@ -957,9 +972,10 @@ static void server_command_ban(shared_ptr<ServerState> s, shared_ptr<Lobby> l,
 ////////////////////////////////////////////////////////////////////////////////
 // Cheat commands
 
-static void server_command_warp(shared_ptr<ServerState>, shared_ptr<Lobby> l,
-    shared_ptr<Client> c, const std::u16string& args) {
+static void server_command_warp(
+    shared_ptr<ServerState> s, shared_ptr<Lobby> l, shared_ptr<Client> c, const std::u16string& args, bool is_warpall) {
   check_is_game(l, true);
+  check_cheats_enabled(s, l);
 
   uint32_t area = stoul(encode_sjis(args), nullptr, 0);
   if (c->area == area) {
@@ -978,59 +994,63 @@ static void server_command_warp(shared_ptr<ServerState>, shared_ptr<Lobby> l,
   send_command_t(l, 0x62, c->lobby_client_id, cmd);
 }
 
-static void server_command_warpme(shared_ptr<ServerState>, shared_ptr<Lobby> l,
-    shared_ptr<Client> c, const std::u16string& args) {
-    check_is_game(l, true);
-
-    uint32_t area = stoul(encode_sjis(args), nullptr, 0);
-    if (c->area == area) {
-        return;
-    }
-
-    size_t limit = area_limit_for_episode(l->episode);
-    if (limit == 0) {
-        return;
-    }
-    else if (area > limit) {
-        send_text_message_printf(c, "$C6Area numbers must\nbe %zu or less.", limit);
-        return;
-    }
-
-    send_warp(c, area);
+static void server_command_warpme(
+    shared_ptr<ServerState> s, shared_ptr<Lobby> l, shared_ptr<Client> c, const std::u16string& args) {
+  server_command_warp(s, l, c, args, false);
 }
 
-static void proxy_command_warp(shared_ptr<ServerState>,
-    ProxyServer::LinkedSession& session, const std::u16string& args) {
+static void server_command_warpall(
+    shared_ptr<ServerState> s, shared_ptr<Lobby> l, shared_ptr<Client> c, const std::u16string& args) {
+  server_command_warp(s, l, c, args, true);
+}
+
+static void proxy_command_warp(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string& args, bool is_warpall) {
+  check_cheats_enabled(s);
   if (!session.is_in_game) {
     send_text_message(session.client_channel, u"$C6You must be in a\ngame to use this\ncommand");
     return;
   }
   uint32_t area = stoul(encode_sjis(args), nullptr, 0);
-  // TODO: Add limit check here like in the server command implementation
-  send_warp(session.client_channel, session.lobby_client_id, area);
+  send_warp(session.client_channel, session.lobby_client_id, area, !is_warpall);
+  if (is_warpall) {
+    send_warp(session.server_channel, session.lobby_client_id, area, false);
+  }
   session.area = area;
 }
 
-static void server_command_next(shared_ptr<ServerState>, shared_ptr<Lobby> l,
+static void proxy_command_warpme(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string& args) {
+  proxy_command_warp(s, session, args, false);
+}
+
+static void proxy_command_warpall(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string& args) {
+  proxy_command_warp(s, session, args, true);
+}
+
+static void server_command_next(shared_ptr<ServerState> s, shared_ptr<Lobby> l,
     shared_ptr<Client> c, const std::u16string&) {
   check_is_game(l, true);
+  check_cheats_enabled(s, l);
 
   size_t limit = area_limit_for_episode(l->episode);
   if (limit == 0) {
     return;
   }
-  send_warp(c, (c->area + 1) % limit);
+  send_warp(c, (c->area + 1) % limit, true);
 }
 
-static void proxy_command_next(shared_ptr<ServerState>,
-    ProxyServer::LinkedSession& session, const std::u16string&) {
+static void proxy_command_next(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string&) {
+  check_cheats_enabled(s);
   if (!session.is_in_game) {
     send_text_message(session.client_channel, u"$C6You must be in a\ngame to use this\ncommand");
     return;
   }
 
   session.area++;
-  send_warp(session.client_channel, session.lobby_client_id, session.area);
+  send_warp(session.client_channel, session.lobby_client_id, session.area, true);
 }
 
 static void server_command_what(shared_ptr<ServerState>, shared_ptr<Lobby> l,
@@ -1086,49 +1106,55 @@ static void proxy_command_song(shared_ptr<ServerState>,
   send_ep3_change_music(session.client_channel, song);
 }
 
-static void server_command_infinite_hp(shared_ptr<ServerState>, shared_ptr<Lobby> l,
-    shared_ptr<Client> c, const std::u16string&) {
+static void server_command_infinite_hp(
+    shared_ptr<ServerState> s, shared_ptr<Lobby> l, shared_ptr<Client> c, const std::u16string&) {
   check_is_game(l, true);
+  check_cheats_enabled(s, l);
 
   c->options.infinite_hp = !c->options.infinite_hp;
   send_text_message_printf(c, "$C6Infinite HP %s",
       c->options.infinite_hp ? "enabled" : "disabled");
 }
 
-static void proxy_command_infinite_hp(shared_ptr<ServerState>,
-    ProxyServer::LinkedSession& session, const std::u16string&) {
+static void proxy_command_infinite_hp(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string&) {
+  check_cheats_enabled(s);
   session.options.infinite_hp = !session.options.infinite_hp;
   send_text_message_printf(session.client_channel, "$C6Infinite HP %s",
       session.options.infinite_hp ? "enabled" : "disabled");
 }
 
-static void server_command_infinite_tp(shared_ptr<ServerState>, shared_ptr<Lobby> l,
-    shared_ptr<Client> c, const std::u16string&) {
+static void server_command_infinite_tp(
+    shared_ptr<ServerState> s, shared_ptr<Lobby> l, shared_ptr<Client> c, const std::u16string&) {
   check_is_game(l, true);
+  check_cheats_enabled(s, l);
 
   c->options.infinite_tp = !c->options.infinite_tp;
   send_text_message_printf(c, "$C6Infinite TP %s",
       c->options.infinite_tp ? "enabled" : "disabled");
 }
 
-static void proxy_command_infinite_tp(shared_ptr<ServerState>,
-    ProxyServer::LinkedSession& session, const std::u16string&) {
+static void proxy_command_infinite_tp(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string&) {
+  check_cheats_enabled(s);
   session.options.infinite_tp = !session.options.infinite_tp;
   send_text_message_printf(session.client_channel, "$C6Infinite TP %s",
       session.options.infinite_tp ? "enabled" : "disabled");
 }
 
-static void server_command_switch_assist(shared_ptr<ServerState>, shared_ptr<Lobby> l,
-    shared_ptr<Client> c, const std::u16string&) {
+static void server_command_switch_assist(
+    shared_ptr<ServerState> s, shared_ptr<Lobby> l, shared_ptr<Client> c, const std::u16string&) {
   check_is_game(l, true);
+  check_cheats_enabled(s, l);
 
   c->options.switch_assist = !c->options.switch_assist;
   send_text_message_printf(c, "$C6Switch assist %s",
       c->options.switch_assist ? "enabled" : "disabled");
 }
 
-static void proxy_command_switch_assist(shared_ptr<ServerState>,
-    ProxyServer::LinkedSession& session, const std::u16string&) {
+static void proxy_command_switch_assist(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string&) {
+  check_cheats_enabled(s);
   session.options.switch_assist = !session.options.switch_assist;
   send_text_message_printf(session.client_channel, "$C6Switch assist %s",
       session.options.switch_assist ? "enabled" : "disabled");
@@ -1165,9 +1191,10 @@ static void server_command_drop(shared_ptr<ServerState>, shared_ptr<Lobby> l,
   send_text_message_printf(l, "Drops %s", (l->flags & Lobby::Flag::DROPS_ENABLED) ? "enabled" : "disabled");
 }
 
-static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
-    shared_ptr<Client> c, const std::u16string& args) {
+static void server_command_item(
+    shared_ptr<ServerState> s, shared_ptr<Lobby> l, shared_ptr<Client> c, const std::u16string& args) {
   check_is_game(l, true);
+  check_cheats_enabled(s, l);
 
   string data = parse_data_string(encode_sjis(args));
   if (data.size() < 2) {
@@ -1195,8 +1222,9 @@ static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
   send_text_message(c, u"$C7Item created:\n" + decode_sjis(name));
 }
 
-static void proxy_command_item(shared_ptr<ServerState>,
-    ProxyServer::LinkedSession& session, const std::u16string& args) {
+static void proxy_command_item(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string& args) {
+  check_cheats_enabled(s);
   if (session.version == GameVersion::BB) {
     send_text_message(session.client_channel,
         u"$C6This command cannot\nbe used on the proxy\nserver in BB games");
@@ -1258,55 +1286,54 @@ typedef void (*proxy_handler_t)(shared_ptr<ServerState>,
 struct ChatCommandDefinition {
   server_handler_t server_handler;
   proxy_handler_t proxy_handler;
-  u16string usage;
 };
 
 static const unordered_map<u16string, ChatCommandDefinition> chat_commands({
-    // TODO: implement command_help and actually use the usage strings here
-    {u"$allevent", {server_command_lobby_event_all, nullptr, u"Usage:\nallevent <name/ID>"}},
-    {u"$ann", {server_command_announce, nullptr, u"Usage:\nann <message>"}},
-    {u"$arrow", {server_command_arrow, proxy_command_arrow, u"Usage:\narrow <color>"}},
-    {u"$auction", {server_command_auction, proxy_command_auction, u"Usage:\nauction"}},
-    {u"$ax", {server_command_ax, nullptr, u"Usage:\nax <message>"}},
-    {u"$ban", {server_command_ban, nullptr, u"Usage:\nban <name-or-number>"}},
-    // TODO: implement this on proxy server
-    {u"$bbchar", {server_command_convert_char_to_bb, nullptr, u"Usage:\nbbchar <user> <pass> <1-4>"}},
-    {u"$cheat", {server_command_cheat, nullptr, u"Usage:\ncheat"}},
-    {u"$debug", {server_command_debug, nullptr, u"Usage:\ndebug"}},
-    {u"$edit", {server_command_edit, nullptr, u"Usage:\nedit <stat> <value>"}},
-    {u"$event", {server_command_lobby_event, proxy_command_lobby_event, u"Usage:\nevent <name>"}},
-    {u"$exit", {server_command_exit, proxy_command_exit, u"Usage:\nexit"}},
-    {u"$gc", {server_command_get_self_card, proxy_command_get_player_card, u"Usage:\ngc"}},
-    {u"$infhp", {server_command_infinite_hp, proxy_command_infinite_hp, u"Usage:\ninfhp"}},
-    {u"$inftp", {server_command_infinite_tp, proxy_command_infinite_tp, u"Usage:\ninftp"}},
-    {u"$item", {server_command_item, proxy_command_item, u"Usage:\nitem <item-code>"}},
-    {u"$i", {server_command_item, proxy_command_item, u"Usage:\ni <item-code>"}},
-    {u"$kick", {server_command_kick, nullptr, u"Usage:\nkick <name-or-number>"}},
-    {u"$li", {server_command_lobby_info, proxy_command_lobby_info, u"Usage:\nli"}},
-    {u"$maxlevel", {server_command_max_level, nullptr, u"Usage:\nmax_level <level>"}},
-    {u"$minlevel", {server_command_min_level, nullptr, u"Usage:\nmin_level <level>"}},
-    {u"$next", {server_command_next, proxy_command_next, u"Usage:\nnext"}},
-    {u"$password", {server_command_password, nullptr, u"Usage:\nlock [password]\nomit password to\nunlock game"}},
-    {u"$patch", {server_command_patch, proxy_command_patch, u"Usage:\npatch <name>"}},
-    {u"$persist", {server_command_persist, nullptr, u"Usage:\npersist"}},
-    {u"$playrec", {server_command_playrec, nullptr, u"Usage:\nplayrec <filename>"}},
-    {u"$rand", {server_command_rand, proxy_command_rand, u"Usage:\nrand [hex seed]\nomit seed to revert\nto default"}},
-    {u"$saverec", {server_command_saverec, nullptr, u"Usage:\nsaverec <filename>"}},
-    {u"$sc", {server_command_send_client, proxy_command_send_client, u"Usage:\nsc <data>"}},
-    {u"$secid", {server_command_secid, proxy_command_secid, u"Usage:\nsecid [section ID]\nomit section ID to\nrevert to normal"}},
-    {u"$silence", {server_command_silence, nullptr, u"Usage:\nsilence <name-or-number>"}},
-    // TODO: implement this on proxy server
-    {u"$song", {server_command_song, proxy_command_song, u"Usage:\nsong <song-number>"}},
-    {u"$spec", {server_command_spec, nullptr, u"Usage:\nspec"}},
-    {u"$ss", {nullptr, proxy_command_send_server, u"Usage:\nss <data>"}},
-    {u"$swa", {server_command_switch_assist, proxy_command_switch_assist, u"Usage:\nswa"}},
-    {u"$type", {server_command_lobby_type, nullptr, u"Usage:\ntype <name>"}},
-    {u"$warp", {server_command_warp, proxy_command_warp, u"Usage:\nwarp <area-number>"}},
-    {u"$warpme", {server_command_warpme, nullptr, u"Usage:\nwarp <area-number>"}},
-    {u"$what", {server_command_what, nullptr, u"Usage:\nwhat"}},
+    {u"$allevent", {server_command_lobby_event_all, nullptr}},
+    {u"$ann", {server_command_announce, nullptr}},
+    {u"$arrow", {server_command_arrow, proxy_command_arrow}},
+    {u"$auction", {server_command_auction, proxy_command_auction}},
+    {u"$ax", {server_command_ax, nullptr}},
+    {u"$ban", {server_command_ban, nullptr}},
+    {u"$bbchar", {server_command_convert_char_to_bb, nullptr}},
+    {u"$cheat", {server_command_cheat, nullptr}},
+    {u"$debug", {server_command_debug, nullptr}},
+    {u"$drop", {server_command_drop, nullptr}},
+    {u"$edit", {server_command_edit, nullptr}},
+    {u"$event", {server_command_lobby_event, proxy_command_lobby_event}},
+    {u"$exit", {server_command_exit, proxy_command_exit}},
+    {u"$gc", {server_command_get_self_card, proxy_command_get_player_card}},
+    {u"$infhp", {server_command_infinite_hp, proxy_command_infinite_hp}},
+    {u"$inftp", {server_command_infinite_tp, proxy_command_infinite_tp}},
+    {u"$item", {server_command_item, proxy_command_item}},
+    {u"$i", {server_command_item, proxy_command_item}},
+    {u"$kick", {server_command_kick, nullptr}},
+    {u"$li", {server_command_lobby_info, proxy_command_lobby_info}},
+    {u"$maxlevel", {server_command_max_level, nullptr}},
+    {u"$minlevel", {server_command_min_level, nullptr}},
+    {u"$next", {server_command_next, proxy_command_next}},
+    {u"$password", {server_command_password, nullptr}},
+    {u"$patch", {server_command_patch, proxy_command_patch}},
+    {u"$persist", {server_command_persist, nullptr}},
+    {u"$playrec", {server_command_playrec, nullptr}},
+    {u"$rand", {server_command_rand, proxy_command_rand}},
+    {u"$saverec", {server_command_saverec, nullptr}},
+    {u"$sc", {server_command_send_client, proxy_command_send_client}},
+    {u"$secid", {server_command_secid, proxy_command_secid}},
+    {u"$silence", {server_command_silence, nullptr}},
+    {u"$song", {server_command_song, proxy_command_song}},
+    {u"$spec", {server_command_spec, nullptr}},
+    {u"$ss", {nullptr, proxy_command_send_server}},
+    {u"$swa", {server_command_switch_assist, proxy_command_switch_assist}},
+    {u"$type", {server_command_lobby_type, nullptr}},
+    {u"$warp", {server_command_warpme, proxy_command_warpme}},
+    {u"$warpme", {server_command_warpme, proxy_command_warpme}},
+    {u"$warpall", {server_command_warpall, proxy_command_warpall}},
+    {u"$what", {server_command_what, nullptr}},
+
+    // unseen commands
     {u"$lower", {server_command_lower_hp, nullptr, u"Usage:\nLowers HP to 3"}},
     {u"$lobby", {server_command_questburst, nullptr, u"Usage:\nExit quest to lobby"}},
-    {u"$drop", {server_command_drop, nullptr, u"Usage:\nToggles drops"}},
 });
 
 struct SplitCommand {
