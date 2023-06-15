@@ -1163,6 +1163,72 @@ static void proxy_command_switch_assist(
       session.options.switch_assist ? "enabled" : "disabled");
 }
 
+static void server_command_drop(shared_ptr<ServerState>, shared_ptr<Lobby> l,
+    shared_ptr<Client> c, const std::u16string&) {
+  check_is_game(l, true);
+  check_is_leader(l, c);
+  l->flags ^= Lobby::Flag::DROPS_ENABLED;
+  send_text_message_printf(l, "Drops %s", (l->flags & Lobby::Flag::DROPS_ENABLED) ? "enabled" : "disabled");
+}
+
+static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
+    shared_ptr<Client> c, const std::u16string& args) {
+  check_is_game(l, true);
+  check_cheats_enabled(s, l);
+
+  PlayerInventoryItem item;
+  item.data = item_for_string(encode_sjis(args));
+  item.data.id = l->generate_item_id(c->lobby_client_id);
+
+  l->add_item(item, c->area, c->x, c->z);
+  send_drop_stacked_item(l, item.data, c->area, c->x, c->z);
+
+  string name = item.data.name(true);
+  send_text_message(c, u"$C7Item created:\n" + decode_sjis(name));
+}
+
+static void proxy_command_item(
+    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string& args) {
+  check_cheats_enabled(s);
+  if (session.version == GameVersion::BB) {
+    send_text_message(session.client_channel,
+        u"$C6This command cannot\nbe used on the proxy\nserver in BB games");
+    return;
+  }
+  if (!session.is_in_game) {
+    send_text_message(session.client_channel,
+        u"$C6You must be in\na game to use this\ncommand");
+    return;
+  }
+  if (session.lobby_client_id != session.leader_client_id) {
+    send_text_message(session.client_channel,
+        u"$C6You must be the\nleader to use this\ncommand");
+    return;
+  }
+
+  bool set_drop = (!args.empty() && (args[0] == u'!'));
+
+  PlayerInventoryItem item;
+  item.data = item_for_string(encode_sjis(set_drop ? args.substr(1) : args));
+  item.data.id = random_object<uint32_t>();
+
+  if (set_drop) {
+    session.next_drop_item = item;
+
+    string name = session.next_drop_item.data.name(true);
+    send_text_message(session.client_channel, u"$C7Next drop:\n" + decode_sjis(name));
+
+  } else {
+    send_drop_stacked_item(session.client_channel, item.data, session.area, session.x, session.z);
+    send_drop_stacked_item(session.server_channel, item.data, session.area, session.x, session.z);
+
+    string name = item.data.name(true);
+    send_text_message(session.client_channel, u"$C7Item created:\n" + decode_sjis(name));
+  }
+}
+
+
+// unseen commands
 static void server_command_lower_hp(shared_ptr<ServerState>, shared_ptr<Lobby> l,
     shared_ptr<Client> c, const std::u16string&) {
     check_is_game(l, true);
@@ -1184,14 +1250,6 @@ static void server_command_questburst(shared_ptr<ServerState>, shared_ptr<Lobby>
     else {
         send_text_message(c, u"Cannot use outside of\nquest.");
     }
-}
-
-static void server_command_drop(shared_ptr<ServerState>, shared_ptr<Lobby> l,
-    shared_ptr<Client> c, const std::u16string&) {
-  check_is_game(l, true);
-  check_is_leader(l, c);
-  l->flags ^= Lobby::Flag::DROPS_ENABLED;
-  send_text_message_printf(l, "Drops %s", (l->flags & Lobby::Flag::DROPS_ENABLED) ? "enabled" : "disabled");
 }
 
 static void server_command_levelup(shared_ptr<ServerState> s, shared_ptr<Lobby>,
@@ -1252,62 +1310,6 @@ static void server_command_matplan(shared_ptr<ServerState> s, shared_ptr<Lobby>,
         c->log.info("applied matplan!");
     });
   });
-}
-
-static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
-    shared_ptr<Client> c, const std::u16string& args) {
-  check_is_game(l, true);
-  check_cheats_enabled(s, l);
-
-  PlayerInventoryItem item;
-  item.data = item_for_string(encode_sjis(args));
-  item.data.id = l->generate_item_id(c->lobby_client_id);
-
-  l->add_item(item, c->area, c->x, c->z);
-  send_drop_stacked_item(l, item.data, c->area, c->x, c->z);
-
-  string name = item.data.name(true);
-  send_text_message(c, u"$C7Item created:\n" + decode_sjis(name));
-}
-
-static void proxy_command_item(
-    shared_ptr<ServerState> s, ProxyServer::LinkedSession& session, const std::u16string& args) {
-  check_cheats_enabled(s);
-  if (session.version == GameVersion::BB) {
-    send_text_message(session.client_channel,
-        u"$C6This command cannot\nbe used on the proxy\nserver in BB games");
-    return;
-  }
-  if (!session.is_in_game) {
-    send_text_message(session.client_channel,
-        u"$C6You must be in\na game to use this\ncommand");
-    return;
-  }
-  if (session.lobby_client_id != session.leader_client_id) {
-    send_text_message(session.client_channel,
-        u"$C6You must be the\nleader to use this\ncommand");
-    return;
-  }
-
-  bool set_drop = (!args.empty() && (args[0] == u'!'));
-
-  PlayerInventoryItem item;
-  item.data = item_for_string(encode_sjis(set_drop ? args.substr(1) : args));
-  item.data.id = random_object<uint32_t>();
-
-  if (set_drop) {
-    session.next_drop_item = item;
-
-    string name = session.next_drop_item.data.name(true);
-    send_text_message(session.client_channel, u"$C7Next drop:\n" + decode_sjis(name));
-
-  } else {
-    send_drop_stacked_item(session.client_channel, item.data, session.area, session.x, session.z);
-    send_drop_stacked_item(session.server_channel, item.data, session.area, session.x, session.z);
-
-    string name = item.data.name(true);
-    send_text_message(session.client_channel, u"$C7Item created:\n" + decode_sjis(name));
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
