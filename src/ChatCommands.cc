@@ -990,8 +990,11 @@ static void server_command_warp(
     return;
   }
   
-  G_InterLevelWarp_6x94 cmd = { {0x94, 0x02, 0}, area, {} };
-  send_command_t(l, 0x62, c->lobby_client_id, cmd);
+  if (is_warpall) {
+    send_warp(l, area, false);
+  } else {
+    send_warp(c, area, true);
+  }
 }
 
 static void server_command_warpme(
@@ -1332,8 +1335,8 @@ static const unordered_map<u16string, ChatCommandDefinition> chat_commands({
     {u"$what", {server_command_what, nullptr}},
 
     // unseen commands
-    {u"$lower", {server_command_lower_hp, nullptr, u"Usage:\nLowers HP to 3"}},
-    {u"$lobby", {server_command_questburst, nullptr, u"Usage:\nExit quest to lobby"}},
+    {u"$lower", {server_command_lower_hp, nullptr}},
+    {u"$lobby", {server_command_questburst, nullptr}},
 });
 
 struct SplitCommand {
