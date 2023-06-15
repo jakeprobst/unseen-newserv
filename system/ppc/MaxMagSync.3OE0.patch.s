@@ -19,11 +19,8 @@ start:
     lis r3, 0x8050
     ori r3, r3, 0x9b50
 
-    # add player offset to player array
-    add r3, r3, r4
-
     # r5 contains the address of the player's character struct
-    lwz r5, [r3]
+    lwzx r5, [r3 + r4]
 
     # 0xd08 is the pointer to the equipped mag
     # r6 contains pointer to equipped mag

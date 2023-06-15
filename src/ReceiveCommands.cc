@@ -3430,6 +3430,29 @@ static void on_6F(shared_ptr<ServerState> s, shared_ptr<Client> c,
 
   send_resume_game(l, c);
   send_server_time(c);
+  try {
+      prepare_client_for_patches(s->function_code_index, c, [s, c]() -> void {
+          auto slowgibs = s->function_code_index->get_patch("SlowGibblesFix", c->specific_version);
+          send_function_call(c, slowgibs);
+          c->function_call_response_queue.emplace_back(
+              [c](uint32_t, uint32_t) -> void {
+                  c->log.info("applied gibbles patch");
+              });
+
+          auto magsync = s->function_code_index->get_patch("MaxMagSync", c->specific_version);
+          send_function_call(c, magsync);
+          c->function_call_response_queue.emplace_back(
+              [c](uint32_t, uint32_t) -> void {
+                  c->log.info("applied MaxMagSync patch");
+              });
+      });
+  }
+  catch (const exception& e) {
+      fprintf(stderr, "no could not apply room join patches for version %08" PRIX32 ": %s",
+              c->specific_version,
+              e.what());
+  }
+
   // Only get player info again on BB, since on other versions the returned info
   // only includes items that would be saved if the client disconnects
   // unexpectedly (that is, only equipped items are included).
