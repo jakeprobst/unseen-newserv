@@ -22,10 +22,6 @@ start:
     # r5 contains the address of the player's character struct
     lwzx r5, [r3 + r4]
 
-    # I don't know why r5 is sometimes null but here we are
-    cmpwi r5, 0
-    beq skip
-
     # 0xd08 is the pointer to the equipped mag
     # r6 contains pointer to equipped mag
     lwz r6, [r5 + 0xd08]
