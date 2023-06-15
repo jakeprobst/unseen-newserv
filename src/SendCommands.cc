@@ -1667,7 +1667,7 @@ void send_join_lobby_dc_nte(shared_ptr<Client> c, shared_ptr<Lobby> l,
 }
 
 void send_join_lobby(shared_ptr<Client> c, shared_ptr<Lobby> l,
-    shared_ptr<const FunctionCodeIndex> fci) {
+    shared_ptr<const FunctionCodeIndex> ) {
   if (l->is_game()) {
     switch (c->version()) {
       case GameVersion::PC:
