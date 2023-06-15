@@ -16,7 +16,6 @@
 #include "FunctionCompiler.hh"
 #include "GSLArchive.hh"
 #include "ItemParameterTable.hh"
-#include "Items.hh"
 #include "LevelTable.hh"
 #include "License.hh"
 #include "Lobby.hh"
@@ -40,6 +39,11 @@ struct ServerState {
     ALWAYS,
     NEVER,
   };
+  enum class CheatModeBehavior {
+    OFF = 0,
+    OFF_BY_DEFAULT,
+    ON_BY_DEFAULT,
+  };
 
   std::string config_filename;
   bool is_replay;
@@ -60,6 +64,7 @@ struct ServerState {
   bool catch_handler_exceptions;
   uint32_t ep3_behavior_flags;
   RunShellBehavior run_shell_behavior;
+  CheatModeBehavior cheat_mode_behavior;
   std::vector<std::shared_ptr<const PSOBBEncryption::KeyFile>> bb_private_keys;
   std::shared_ptr<const FunctionCodeIndex> function_code_index;
   std::shared_ptr<const PatchFileIndex> pc_patch_file_index;
@@ -77,6 +82,7 @@ struct ServerState {
   std::shared_ptr<const ToolRandomSet> tool_random_set;
   std::array<std::shared_ptr<const WeaponRandomSet>, 4> weapon_random_sets;
   std::shared_ptr<const ItemParameterTable> item_parameter_table;
+  std::shared_ptr<const MagEvolutionTable> mag_evolution_table;
 
   std::shared_ptr<Episode3::TournamentIndex> ep3_tournament_index;
 

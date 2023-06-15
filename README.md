@@ -52,17 +52,13 @@ With that said, I offer no guarantees on how or when this project will advance. 
 Current known issues / missing features / things to do:
 - Implement the rest of PSOBB. Major areas of work:
     - Find any remaining mismatches in enemy IDs / experience (Episode 1 is mostly fixed now, except for Dark Falz)
-    - Replace enemy list with quest layout when loading a quest
-    - Implement all remaining player_use_item cases (there are many!)
-    - Handle mag feeding and evolution properly
+    - Replace enemy list, game episode, etc. with quest data when loading a quest
     - Implement trade window
     - Fix some edge cases on the BB proxy server (e.g. make sure Change Ship does the right thing, which is not the same as what it should do on other versions).
 - There is a function that encodes QST files, but there's no corresponding CLI option.
 - Figure out what controls BML file data segment alignment.
 - PSOX is not tested at all.
-- Improve the patch system. Specifically:
-    - Memory patches currently are platform-specific but not version-specific. This makes them quite a bit harder to write and use properly.
-    - Implement the PSOLoad hack to make loading work reliably on real hardware.
+    - Deal with item.data2d byteswapping done by the GC client, including in the 6x6D command.
 - Find a way to silence audio in RunDOL.s. Some old DOLs don't reset audio systems at load time and it's annoying to hear the crash buzz when the GC hasn't actually crashed.
 - Implement private and overflow lobbies.
 - Enforce client-side size limits (e.g. for 60/62 commands) on the server side as well. (For 60/62 specifically, perhaps transform them to 6C/6D if needed.)
@@ -75,7 +71,6 @@ Current known issues / missing features / things to do:
     - Tournament deck restrictions aren't enforced when populating COMs at tournament start time. This can cause weird behavior if, for example, a COM deck contains assist cards and the tournament rules forbid them.
     - There is a rare failure mode during battles that causes one of the clients to be disconnected.
 - Code style
-    - The internal menu abstraction is ugly and hard to work with. Rewrite it.
     - Add default values in all command structures (like we use for Episode 3 battle commands).
 
 ## Compatibility
@@ -101,7 +96,7 @@ newserv supports several versions of PSO. Specifically:
 1. *DC support has only been tested with the US versions of PSO DC. Other versions probably don't work, but will be easy to add support for. Please submit a GitHub issue if you have a non-US DC version, and can provide a log from a connection attempt.*
 2. *newserv's implementations of these versions are based on disassembly of the client executables and have never been tested.*
 3. *Some basic features are not implemented in Blue Burst games, so the games are not very playable. A lot of work has to be done to get BB games to a playable state.*
-4. *Support for PSO Dreamcast Trial Edition and the December 2000 prototype is somewhat incomplete and probably never will be complete. These versions are rather unstable and seem to crash often, but it's not obvious whether it's because they're prototypes or because newserv sends data they can't hendle.*
+4. *Support for PSO Dreamcast Trial Edition and the December 2000 prototype is somewhat incomplete and probably never will be complete. These versions are rather unstable and seem to crash often, but it's not obvious whether it's because they're prototypes or because newserv sends data they can't handle.*
 
 ## Setup
 
@@ -316,7 +311,8 @@ Some commands only work on the game server and not on the proxy server. The chat
 * Cheat mode commands
     * `$cheat`: Enables or disables cheat mode for the current game. All other cheat mode commands do nothing if cheat mode is disabled. This command does nothing on the proxy server - cheat commands are always available there.
     * `$infhp` / `$inftp`: Enables or disables infinite HP or TP mode. Applies to only you. In infinite HP mode, one-hit KO attacks will still kill you.
-    * `$warp <area-id>`: Warps yourself to the given area.
+    * `$warpme <area-id>`: Warps yourself to the given area.
+    * `$warpall <area-id>`: Warps everyone in the game to the given area. You must be the leader to use this command, unless you're on the proxy server.
     * `$next`: Warps yourself to the next area.
     * `$swa`: Enables or disables switch assist. When enabled, the server will attempt to automatically unlock two-player doors in solo games if you step on both switches sequentially.
     * `$item <data>` (or `$i <data>`): Create an item. Item codes are 16 hex bytes; at least 2 bytes must be specified, and all unspecified bytes are zeroes. If you are on the proxy server, you must not be using Blue Burst for this command to work. On the game server, this command works for all versions.

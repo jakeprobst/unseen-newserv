@@ -4266,6 +4266,7 @@ struct G_SyncGameStateHeader_6x6B_6x6C_6x6D_6x6E {
 
 // Decompressed format is a list of these
 struct G_SyncEnemyState_6x6B_Entry_Decompressed {
+  // TODO: Verify this format on DC and PC. It appears correct for GC and BB.
   le_uint32_t unknown_a1; // Possibly some kind of flags
   // enemy_index is not the same as enemy_id, unfortunately - the enemy_id sent
   // in the 6x76 command when an enemy is killed does not match enemy_index
@@ -4282,6 +4283,7 @@ struct G_SyncEnemyState_6x6B_Entry_Decompressed {
 
 // Decompressed format is a list of these
 struct G_SyncObjectState_6x6C_Entry_Decompressed {
+  // TODO: Verify this format on DC and PC. It appears correct for GC and BB.
   le_uint16_t flags;
   le_uint16_t object_index;
 } __packed__;
@@ -4290,6 +4292,7 @@ struct G_SyncObjectState_6x6C_Entry_Decompressed {
 // Compressed format is the same as 6x6B.
 
 struct G_SyncItemState_6x6D_Decompressed {
+  // TODO: Verify this format on DC and PC. It appears correct for GC and BB.
   // Note: 16 vs. 15 is not a bug here - there really is an extra field in the
   // total drop count vs. the floor item count. Despite this, Pioneer 2 or Lab
   // (area 0) isn't included in total_items_dropped_per_area (so Forest 1 is [0]
@@ -4320,6 +4323,7 @@ struct G_SyncItemState_6x6D_Decompressed {
 // Compressed format is the same as 6x6B.
 
 struct G_SyncFlagState_6x6E_Decompressed {
+  // TODO: Verify this format on DC and PC. It appears correct for GC and BB.
   // The three unknowns here are the sizes (in bytes) of three fields
   // immediately following this structure. It is currently unknown what these
   // fields represent. The three unknown fields always sum to the size field.
