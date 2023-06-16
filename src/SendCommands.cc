@@ -1667,7 +1667,7 @@ void send_join_lobby_dc_nte(shared_ptr<Client> c, shared_ptr<Lobby> l,
 }
 
 void send_join_lobby(shared_ptr<Client> c, shared_ptr<Lobby> l,
-    shared_ptr<const FunctionCodeIndex> fci) {
+    shared_ptr<const FunctionCodeIndex> ) {
   if (l->is_game()) {
     switch (c->version()) {
       case GameVersion::PC:
@@ -1681,28 +1681,6 @@ void send_join_lobby(shared_ptr<Client> c, shared_ptr<Lobby> l,
         [[fallthrough]];
       case GameVersion::GC:
         send_join_game_t<PlayerLobbyDataDCGC, PlayerDispDataDCPCV3>(c, l);
-        try {
-            prepare_client_for_patches(fci, c, [fci, c]() -> void {
-                auto slowgibs = fci->get_patch("SlowGibblesFix", c->specific_version);
-                send_function_call(c, slowgibs);
-                c->function_call_response_queue.emplace_back(
-                    [c](uint32_t, uint32_t) -> void {
-                        c->log.info("applied gibbles patch");
-                    });
-
-                auto magsync = fci->get_patch("MaxMagSync", c->specific_version);
-                send_function_call(c, magsync);
-                c->function_call_response_queue.emplace_back(
-                    [c](uint32_t, uint32_t) -> void {
-                        c->log.info("applied MaxMagSync patch");
-                    });
-                });
-        }
-        catch (const exception& e) {
-            fprintf(stderr, "no slow gibbles patch for version %08" PRIX32 ": %s",
-                    c->specific_version,
-                    e.what());
-        }
         break;
       case GameVersion::XB:
         send_join_game_t<PlayerLobbyDataXB, PlayerDispDataDCPCV3>(c, l);
@@ -1910,14 +1888,22 @@ void send_player_stats_change(Channel& ch, uint16_t client_id, PlayerStatsChange
   send_command_vt(ch, (subs.size() > 0x400 / sizeof(G_UpdatePlayerStat_6x9A)) ? 0x6C : 0x60, 0x00, subs);
 }
 
-void send_warp(Channel& ch, uint8_t client_id, uint32_t area) {
+void send_warp(Channel& ch, uint8_t client_id, uint32_t area, bool is_private) {
   G_InterLevelWarp_6x94 cmd = {{0x94, 0x02, 0}, area, {}};
-  ch.send(0x62, client_id, &cmd, sizeof(cmd));
+  ch.send(is_private ? 0x62 : 0x60, client_id, &cmd, sizeof(cmd));
 }
 
-void send_warp(shared_ptr<Client> c, uint32_t area) {
-  send_warp(c->channel, c->lobby_client_id, area);
+void send_warp(shared_ptr<Client> c, uint32_t area, bool is_private) {
+  send_warp(c->channel, c->lobby_client_id, area, is_private);
   c->area = area;
+}
+
+void send_warp(shared_ptr<Lobby> l, uint32_t area, bool is_private) {
+  for (const auto& c : l->clients) {
+    if (c) {
+      send_warp(c, area, is_private);
+    }
+  }
 }
 
 void send_ep3_change_music(Channel& ch, uint32_t song) {
