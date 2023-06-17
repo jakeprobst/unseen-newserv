@@ -1186,6 +1186,44 @@ static void server_command_questburst(shared_ptr<ServerState>, shared_ptr<Lobby>
     }
 }
 
+static void server_command_restore(shared_ptr<ServerState>, shared_ptr<Lobby> l,
+    shared_ptr<Client> c, const std::u16string& args) {
+    check_is_game(l, true);
+    auto& inv = c->game_data.player()->inventory;
+    size_t count = min<uint8_t>(inv.num_items, 30);
+    int z = 0;
+    
+    send_text_message(c, u"Items restored.");
+    if (c->game_data.player()->disp.meseta != 999999) { //Checks how much meseta the player has. 
+        PlayerInventoryItem item;
+        item.data.data1[0] = 0x04; //Meseta
+        item.data.data2[0] = 0x3F;
+        item.data.data2[1] = 0x42;
+        item.data.data2[2] = 0x0F;
+        item.data.id = l->generate_item_id(c->lobby_client_id);
+        l->add_item(item, c->area, c->x, c->z);
+        send_drop_stacked_item(l, item.data, c->area, c->x - 10, c->z - 10);
+    } for (size_t x = 0; x < count; x++) {
+        if (inv.items[x].data.data1[0] == 0x03 && inv.items[x].data.data1[1] < 0x09 && inv.items[x].data.data1[5] < 0x0A) {
+            PlayerInventoryItem item;
+            item.data.data1[0] = inv.items[x].data.data1[0];
+            item.data.data1[1] = inv.items[x].data.data1[1]; //Copies relevant inventory item data.
+            item.data.data1[2] = inv.items[x].data.data1[2];
+            item.data.data1[5] = 0x0A - inv.items[x].data.data1[5]; //Compares inventory stack amount.
+            item.data.id = l->generate_item_id(c->lobby_client_id);
+            l->add_item(item, c->area, c->x, c->z);
+            send_drop_stacked_item(l, item.data, c->area, c->x, c->z);
+        } for (int emptyslots = 30 - inv.num_items; z < emptyslots; z++) {
+            PlayerInventoryItem item;
+            item.data.data1[0] = 0x03; //Scapedolls
+            item.data.data1[1] = 0x09;
+            item.data.id = l->generate_item_id(c->lobby_client_id);
+            l->add_item(item, c->area, c->x, c->z);
+            send_drop_stacked_item(l, item.data, c->area, c->x + 10, c->z + 10);
+        }
+    }
+}
+
 static void server_command_drop(shared_ptr<ServerState>, shared_ptr<Lobby> l,
     shared_ptr<Client> c, const std::u16string&) {
   check_is_game(l, true);
@@ -1337,6 +1375,7 @@ static const unordered_map<u16string, ChatCommandDefinition> chat_commands({
     // unseen commands
     {u"$lower", {server_command_lower_hp, nullptr}},
     {u"$lobby", {server_command_questburst, nullptr}},
+    {u"$restore", {server_command_restore, nullptr}},
 });
 
 struct SplitCommand {
