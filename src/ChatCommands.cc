@@ -1325,11 +1325,11 @@ static void server_command_techs(shared_ptr<ServerState> s, shared_ptr<Lobby>,
   });
 
   const std::unordered_map<string, uint32_t> techlevels {
-    {"techs1", pack_bytes(techs[0], techs[1], techs[2], techs[3])},
-    {"techs2", pack_bytes(techs[4], techs[5], techs[6], techs[7])},
-    {"techs3", pack_bytes(techs[8], techs[9], techs[10], techs[11])},
-    {"techs4", pack_bytes(techs[12], techs[13], techs[14], techs[15])},
-    {"techs5", pack_bytes(techs[16], techs[17], techs[18], 0xFF)},
+    {"tech1", pack_bytes(techs[0], techs[1], techs[2], techs[3])},
+    {"tech2", pack_bytes(techs[4], techs[5], techs[6], techs[7])},
+    {"tech3", pack_bytes(techs[8], techs[9], techs[10], techs[11])},
+    {"tech4", pack_bytes(techs[12], techs[13], techs[14], techs[15])},
+    {"tech5", pack_bytes(techs[16], techs[17], techs[18], 0xFF)},
   };
 
   prepare_client_for_patches(s->function_code_index, c, [s, c, techlevels]() -> void {
