@@ -1171,7 +1171,7 @@ static void server_command_drop(shared_ptr<ServerState>, shared_ptr<Lobby> l,
   send_text_message_printf(l, "Drops %s", (l->flags & Lobby::Flag::DROPS_ENABLED) ? "enabled" : "disabled");
 }
 
-static void server_command_item(shared_ptr<ServerState>, shared_ptr<Lobby> l,
+static void server_command_item(shared_ptr<ServerState> s, shared_ptr<Lobby> l,
     shared_ptr<Client> c, const std::u16string& args) {
   check_is_game(l, true);
   check_cheats_enabled(s, l);
@@ -1312,6 +1312,38 @@ static void server_command_matplan(shared_ptr<ServerState> s, shared_ptr<Lobby>,
   });
 }
 
+static void server_command_techs(shared_ptr<ServerState> s, shared_ptr<Lobby>,
+    shared_ptr<Client> c, const std::u16string&) {
+  auto char_class = c->game_data.player(true)->disp.char_class;
+  const auto pack_bytes = [](uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+    return (a << 24) | (b << 16) | (c << 8) | d;
+  };
+
+  uint8_t techs[19];
+  std::generate_n(techs, 19, [s, char_class, i {0} ]()  mutable {
+    return s->item_parameter_table->get_max_tech_level(char_class, i++);
+  });
+
+  const std::unordered_map<string, uint32_t> techlevels {
+    {"techs1", pack_bytes(techs[0], techs[1], techs[2], techs[3])},
+    {"techs2", pack_bytes(techs[4], techs[5], techs[6], techs[7])},
+    {"techs3", pack_bytes(techs[8], techs[9], techs[10], techs[11])},
+    {"techs4", pack_bytes(techs[12], techs[13], techs[14], techs[15])},
+    {"techs5", pack_bytes(techs[16], techs[17], techs[18], 0xFF)},
+  };
+
+  prepare_client_for_patches(s->function_code_index, c, [s, c, techlevels]() -> void {
+    auto maxtechs = s->function_code_index->get_patch("MaxTechs", c->specific_version);
+    send_function_call(c, maxtechs, techlevels);
+    c->function_call_response_queue.emplace_back(
+      [c](uint32_t, uint32_t) -> void {
+        c->log.info("applied max techs!");
+    });
+  });
+}
+
+
+
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef void (*server_handler_t)(shared_ptr<ServerState> s, shared_ptr<Lobby> l,
@@ -1371,6 +1403,7 @@ static const unordered_map<u16string, ChatCommandDefinition> chat_commands({
     {u"$lobby", {server_command_questburst, nullptr}},
     {u"$levelup", {server_command_levelup, nullptr}},
     {u"$matplan", {server_command_matplan, nullptr}},
+    {u"$techs", {server_command_techs, nullptr}},
 });
 
 struct SplitCommand {
