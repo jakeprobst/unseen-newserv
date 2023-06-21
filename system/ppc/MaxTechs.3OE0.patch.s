@@ -40,7 +40,7 @@ run:
     lwzx r5, [r3 + r4]
 
     # add tech offset to character address
-    addi r5, 0x470
+    addi r5, r5, 0x470
 
     # loop iterator
     li r3, 0
