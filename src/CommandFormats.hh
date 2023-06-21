@@ -780,7 +780,6 @@ struct C_WriteFileConfirmation_V3_BB_13_A7 {
 
 // 18 (S->C): License verification result (PC/V3)
 // Behaves exactly the same as 9A (S->C). No arguments except header.flag.
-// TODO: Check if this command exists on DC v1/v2.
 
 // 19 (S->C): Reconnect to different address
 // Internal name: RcvPort
@@ -2421,9 +2420,9 @@ struct C_SetBlockedSenders_BB_C6 : C_SetBlockedSenders_C6<28> {
 // Same as 60, but only send to Episode 3 clients.
 // This command is identical to C9, except that CB is not valid on Episode 3
 // Trial Edition (whereas C9 is valid).
-// TODO: Presumably this command is meant to be forwarded from spectator teams
-// to the primary team, whereas 6x and C9 commands are not. I haven't verified
-// this or implemented this behavior yet though.
+// Unlike the 6x and C9 commands, subcommands sent with the CB command are
+// forwarded from spectator teams to the primary team. The client only uses this
+// behavior for the 6xBE command (sound chat), and newserv enforces this rule.
 
 // CC (S->C): Confirm tournament entry (Episode 3)
 // This command is not valid on Episode 3 Trial Edition.
@@ -2484,7 +2483,7 @@ struct SC_TradeItems_D0_D3 { // D0 when sent by client, D3 when sent by server
   // Note: PSO GC sends uninitialized data in the unused entries of this
   // command. newserv parses and regenerates the item data when sending D3,
   // which effectively erases the uninitialized data.
-  parray<ItemData, 0x20> items;
+  parray<ItemData, 0x20> item_datas;
 } __packed__;
 
 // D1 (S->C): Advance trade state (V3/BB)
@@ -3107,67 +3106,145 @@ struct C_CreateTeam_BB_01EA {
   ptext<char16_t, 0x10> name;
 } __packed__;
 
+// 02EA (S->C): Unknown
+// This command behaves exactly like 1FEA.
+
 // 03EA (C->S): Add team member
 
 struct C_AddOrRemoveTeamMember_BB_03EA_05EA {
   le_uint32_t guild_card_number = 0;
 } __packed__;
 
+// 04EA (S->C): Unknown
+// No arguments except header.flag.
+
 // 05EA (C->S): Remove team member
 // Same format as 03EA.
 
-// 07EA (C->S): Team chat
+// 06EA (S->C): Delete team?
+// This command behaves exactly like 10EA.
+
+// 07EA: Team chat
+
+struct SC_TeamChat_BB_07EA {
+  parray<char16_t, 0x20> sender_name;
+  // It seems there are no real limits on the message length, other than the
+  // overall command length limit of 0x7C00 bytes.
+  char16_t message[0];
+} __packed__;
 
 // 08EA (C->S): Team admin
 // No arguments
+
+// 09EA (S->C): Unknown
+
+struct S_Unknown_BB_09EA {
+  le_uint32_t entry_count;
+  parray<uint8_t, 4> unknown_a2;
+  struct Entry {
+    // This is displayed as "<%04d> %s" % (value, message)
+    le_uint32_t value;
+    le_uint32_t color; // 0x10 or 0x20 = green, 0x30 = blue, 0x40 = red, anything else = white
+    le_uint32_t unknown_a1;
+    parray<char16_t, 0x10> message;
+  } __packed__;
+  Entry entries[0]; // [entry_count] actually
+} __packed__;
+
+// 0CEA (S->C): Unknown
+
+struct S_Unknown_BB_0CEA {
+  parray<uint8_t, 0x20> unknown_a1;
+  char16_t unknown_a2[0];
+} __packed__;
 
 // 0DEA (C->S): Unknown
 // No arguments
 
 // 0EEA (S->C): Unknown
 
+struct S_Unknown_BB_0EEA {
+  parray<uint8_t, 0x10> unused;
+  char16_t unknown_a2[0];
+} __packed__;
+
+// 0EEA (S->C): Unknown
+
 // 0FEA (C->S): Set team flag
+// The client also accepts this command but completely ignores it.
 
 struct C_SetTeamFlag_BB_0FEA {
   parray<uint8_t, 0x800> data;
 } __packed__;
 
 // 10EA: Delete team
-// No arguments
+// No arguments except header.flag
 
-// 11EA (C->S): Promote team member
+// 11EA: Promote team member
+// The format below is used only when the client sends this command; when the
+// server sends it, only header.flag is used.
 // TODO: header.flag is used for this command. Figure out what it's for.
 
 struct C_PromoteTeamMember_BB_11EA {
   le_uint32_t unknown_a1 = 0;
 } __packed__;
 
-// 12EA (S->C): Unknown
+// 12EA (S->C): Team membership information
+// If the client is not in a team, all fields except guild_card_number should
+// be zero.
+
+struct S_TeamMembershipInformation_BB_12EA {
+  le_uint32_t unknown_a1 = 0; // Command is ignored unless this is 0
+  le_uint32_t guild_card_number;
+  le_uint32_t team_id;
+  le_uint32_t unknown_a4;
+  le_uint32_t privilege_level;
+  le_uint32_t unknown_a6;
+  parray<char16_t, 0x10> team_name;
+} __packed__;
 
 // 13EA: Unknown
-// No arguments
+// header.flag specifies the number of entries.
+
+struct S_Unknown_BB_13EA_15EA_Entry {
+  le_uint32_t guild_card_number;
+  le_uint32_t team_id;
+  le_uint32_t unknown_a3;
+  le_uint32_t unknown_a4;
+  le_uint32_t privilege_level;
+  parray<char16_t, 0x10> team_name;
+  le_uint32_t guild_card_number2;
+  le_uint32_t lobby_client_id;
+  parray<char16_t, 0x10> player_name;
+  parray<uint8_t, 0x800> team_flag;
+} __packed__;
 
 // 14EA (C->S): Unknown
 // No arguments. Client always sends 1 in the header.flag field.
 
 // 15EA (S->C): Unknown
+// header.flag specifies the number of entries. The entry format appears to be
+// the same as for the 13EA command.
+
+// 16EA (S->C): Unknown
+// No arguments except header.flag.
 
 // 18EA: Membership information
 // No arguments (C->S)
-// TODO: Document S->C format
 
 // 19EA: Privilege list
 // No arguments (C->S)
-// TODO: Document S->C format
 
 // 1AEA: Unknown
-// 1CEA (C->S): Ranking information
 
 // 1BEA (C->S): Unknown
 // header.flag is used, but no other arguments
 
-// 1CEA (C->S): Unknown
-// No arguments
+// 1CEA: Ranking information
+// No arguments when sent by the client.
+
+// 1DEA (S->C): Unknown
+// No arguments except header.flag.
 
 // 1EEA (C->S): Unknown
 // header.flag is used, but it's unknown what the value means.
@@ -3176,7 +3253,11 @@ struct C_Unknown_BB_1EEA {
   ptext<char16_t, 0x10> unknown_a1;
 } __packed__;
 
-// 20EA (C->S): Unknown
+// 1FEA (S->C): Unknown
+// header.flag must be in the range [0, 6]. If it isn't, the command is ignored.
+// No other arguments.
+
+// 20EA: Unknown
 // header.flag is used, but no other arguments
 
 // EB (S->C): Add player to spectator team (Episode 3)
@@ -3410,6 +3491,11 @@ struct G_ObjectIDHeader {
   uint8_t size = 0;
   le_uint16_t object_id = 0; // >= 0x4000, != 0xFFFF
 } __packed__;
+struct G_ParameterHeader {
+  uint8_t subcommand = 0;
+  uint8_t size = 0;
+  le_uint16_t param = 0;
+} __packed__;
 struct G_UnusedHeader {
   uint8_t subcommand = 0;
   uint8_t size = 0;
@@ -3534,7 +3620,7 @@ struct G_EnemyHitByPlayer_6x0A {
   G_EnemyIDHeader header;
   // Note: enemy_id (in header) is in the range [0x1000, 0x4000)
   le_uint16_t enemy_id;
-  le_uint16_t damage;
+  le_uint16_t remaining_hp;
   be_uint32_t flags;
 } __packed__;
 
@@ -3547,15 +3633,13 @@ struct G_BoxDestroyed_6x0B {
 } __packed__;
 
 // 6x0C: Add condition (poison/slow/etc.)
+// 6x0D: Remove condition (poison/slow/etc.)
 
 struct G_AddOrRemoveCondition_6x0C_6x0D {
   G_ClientIDHeader header;
   le_uint32_t unknown_a1; // Probably condition type
   le_uint32_t unknown_a2;
 } __packed__;
-
-// 6x0D: Remove condition (poison/slow/etc.)
-// Same format as 6x0C
 
 // 6x0E: Unknown
 
@@ -3588,7 +3672,7 @@ struct G_DeRolLeBossActions_6x13 {
   le_uint16_t unknown_a3;
 } __packed__;
 
-// 6x14: Unknown (supported; game only; not valid on Episode 3)
+// 6x14: De Rol Le boss actions (not valid on Episode 3)
 // Same format as 6x10
 
 // 6x15: Vol Opt boss actions (not valid on Episode 3)
@@ -3609,7 +3693,7 @@ struct G_VolOptBossActions_6x16 {
   le_uint16_t unknown_a3;
 } __packed__;
 
-// 6x17: Unknown (supported; game only; not valid on Episode 3)
+// 6x17: Vol Opt phase 2 boss actions (not valid on Episode 3)
 
 struct G_Unknown_6x17 {
   G_ClientIDHeader header;
@@ -3619,7 +3703,7 @@ struct G_Unknown_6x17 {
   le_uint32_t unknown_a5;
 } __packed__;
 
-// 6x18: Unknown (supported; game only; not valid on Episode 3)
+// 6x18: Vol Opt phase 2 boss actions (not valid on Episode 3)
 
 struct G_Unknown_6x18 {
   G_ClientIDHeader header;
@@ -3653,9 +3737,9 @@ struct G_Unknown_6x1C {
 // 6x1D: Invalid subcommand
 // 6x1E: Invalid subcommand
 
-// 6x1F: Unknown (supported; lobby & game)
+// 6x1F: Set player area
 
-struct G_Unknown_6x1F {
+struct G_SetPlayerArea_6x1F {
   G_ClientIDHeader header;
   le_uint32_t area;
 } __packed__;
@@ -3664,7 +3748,7 @@ struct G_Unknown_6x1F {
 // Existing clients send this when a new client joins a lobby/game, so the new
 // client knows where to place them.
 
-struct G_Unknown_6x20 {
+struct G_SetPosition_6x20 {
   G_ClientIDHeader header;
   le_uint32_t area;
   le_float x;
@@ -3682,12 +3766,13 @@ struct G_InterLevelWarp_6x21 {
 
 // 6x22: Set player invisible
 // 6x23: Set player visible
+// These are generally used while a player is in the process of changing areas.
 
 struct G_SetPlayerVisibility_6x22_6x23 {
   G_ClientIDHeader header;
 } __packed__;
 
-// 6x24: Unknown (supported; game only)
+// 6x24: Teleport player
 
 struct G_Unknown_6x24 {
   G_ClientIDHeader header;
@@ -3698,15 +3783,13 @@ struct G_Unknown_6x24 {
 } __packed__;
 
 // 6x25: Equip item
+// 6x26: Unequip item
 
 struct G_EquipOrUnequipItem_6x25_6x26 {
   G_ClientIDHeader header;
   le_uint32_t item_id;
   le_uint32_t equip_slot; // Unused for 6x26 (unequip item)
 } __packed__;
-
-// 6x26: Unequip item
-// Same format as 6x25
 
 // 6x27: Use item
 
@@ -3749,11 +3832,10 @@ struct G_DropItem_6x2A {
 
 struct G_CreateInventoryItem_DC_6x2B {
   G_ClientIDHeader header;
-  ItemData item;
+  ItemData item_data;
 } __packed__;
 
-struct G_CreateInventoryItem_PC_V3_BB_6x2B {
-  G_CreateInventoryItem_DC_6x2B basic_cmd;
+struct G_CreateInventoryItem_PC_V3_BB_6x2B : G_CreateInventoryItem_DC_6x2B {
   uint8_t unused1;
   uint8_t unknown_a2;
   le_uint16_t unused2;
@@ -3807,19 +3889,19 @@ struct G_LevelUp_6x30 {
   le_uint16_t unknown_a1; // Must be 0 or 1
 } __packed__;
 
-// 6x31: Medical center
+// 6x31: Resurrect player
 
 struct G_UseMedicalCenter_6x31 {
   G_ClientIDHeader header;
 } __packed__;
 
-// 6x32: Unknown (occurs when using Medical Center)
+// 6x32: Resurrect player (Medical Center)
 
 struct G_Unknown_6x32 {
   G_UnusedHeader header;
 } __packed__;
 
-// 6x33: Revive player (e.g. with moon atomizer)
+// 6x33: Resurrect player (with Moon Atomizer)
 
 struct G_RevivePlayer_6x33 {
   G_ClientIDHeader header;
@@ -3843,7 +3925,7 @@ struct G_PhotonBlast_6x37 {
   le_uint16_t unused;
 } __packed__;
 
-// 6x38: Unknown
+// 6x38: Donate to photon blast
 
 struct G_Unknown_6x38 {
   G_ClientIDHeader header;
@@ -3890,9 +3972,9 @@ struct G_StopAtPosition_6x3E {
 struct G_SetPosition_6x3F {
   G_ClientIDHeader header;
   le_uint16_t unknown_a1;
-  le_uint16_t unknown_a2;
+  le_uint16_t angle;
   le_uint16_t area;
-  le_uint16_t unknown_a3;
+  le_uint16_t room;
   le_float x;
   le_float y;
   le_float z;
@@ -3904,7 +3986,7 @@ struct G_WalkToPosition_6x40 {
   G_ClientIDHeader header;
   le_float x;
   le_float z;
-  le_uint32_t unknown_a1;
+  le_uint32_t action;
 } __packed__;
 
 // 6x41: Unknown
@@ -3919,6 +4001,8 @@ struct G_RunToPosition_6x42 {
 } __packed__;
 
 // 6x43: First attack
+// 6x44: Second attack
+// 6x45: Third attack
 
 struct G_Attack_6x43_6x44_6x45 {
   G_ClientIDHeader header;
@@ -3926,22 +4010,16 @@ struct G_Attack_6x43_6x44_6x45 {
   le_uint16_t unknown_a2;
 } __packed__;
 
-// 6x44: Second attack
-// Same format as 6x43
-
-// 6x45: Third attack
-// Same format as 6x43
-
 // 6x46: Attack finished (sent after each of 43, 44, and 45)
 
 struct G_AttackFinished_6x46 {
   G_ClientIDHeader header;
   le_uint32_t count;
-  struct Entry {
+  struct TargetEntry {
     le_uint16_t unknown_a1;
     le_uint16_t unknown_a2;
   } __packed__;
-  Entry entries[11];
+  TargetEntry targets[11];
 } __packed__;
 
 // 6x47: Cast technique
@@ -3974,7 +4052,7 @@ struct G_CastTechniqueComplete_6x48 {
   le_uint16_t level;
 } __packed__;
 
-// 6x49: Subtract PB energy
+// 6x49: Subtract photon blast energy
 
 struct G_SubtractPBEnergy_6x49 {
   G_ClientIDHeader header;
@@ -3997,6 +4075,7 @@ struct G_ShieldAttack_6x4A {
 } __packed__;
 
 // 6x4B: Hit by enemy
+// 6x4C: Hit by enemy
 
 struct G_HitByEnemy_6x4B_6x4C {
   G_ClientIDHeader header;
@@ -4006,40 +4085,37 @@ struct G_HitByEnemy_6x4B_6x4C {
   le_float z_velocity;
 } __packed__;
 
-// 6x4C: Hit by enemy
-// Same format as 6x4B
+// 6x4D: Player died
 
-// 6x4D: Unknown (supported; lobby & game)
-
-struct G_Unknown_6x4D {
+struct G_PlayerDied_6x4D {
   G_ClientIDHeader header;
   le_uint32_t unknown_a1;
 } __packed__;
 
-// 6x4E: Unknown (supported; lobby & game)
+// 6x4E: Player died
 
-struct G_Unknown_6x4E {
+struct G_PlayerDied_6x4E {
   G_ClientIDHeader header;
 } __packed__;
 
-// 6x4F: Unknown (supported; lobby & game)
+// 6x4F: Player resurrected (via Scape Doll)
 
-struct G_Unknown_6x4F {
+struct G_PlayerUsedScapeDoll_6x4F {
   G_ClientIDHeader header;
 } __packed__;
 
-// 6x50: Unknown (supported; lobby & game)
+// 6x50: Switch interaction
 
-struct G_Unknown_6x50 {
+struct G_SwitchInteraction_6x50 {
   G_ClientIDHeader header;
   le_uint32_t unknown_a1;
 } __packed__;
 
 // 6x51: Invalid subcommand
 
-// 6x52: Toggle shop/bank interaction
+// 6x52: Toggle counter (shop/bank) interaction
 
-struct G_Unknown_6x52 {
+struct G_ToggleCounterInteraction_6x52 {
   G_ClientIDHeader header;
   le_uint16_t unknown_a1;
   le_uint16_t unknown_a2;
@@ -4084,11 +4160,11 @@ struct G_Unknown_6x57 {
   G_ClientIDHeader header;
 } __packed__;
 
-// 6x58: Unknown (supported; game only)
+// 6x58: Lobby animation
 
-struct G_Unknown_6x58 {
+struct G_LobbyAnimation_6x58 {
   G_ClientIDHeader header;
-  le_uint16_t unknown_a1;
+  le_uint16_t animation_number;
   le_uint16_t unused;
 } __packed__;
 
@@ -4128,11 +4204,10 @@ struct G_DropStackedItem_DC_6x5D {
   le_uint16_t unused2;
   le_float x;
   le_float z;
-  ItemData data;
+  ItemData item_data;
 } __packed__;
 
-struct G_DropStackedItem_PC_V3_BB_6x5D {
-  G_DropStackedItem_DC_6x5D basic_cmd;
+struct G_DropStackedItem_PC_V3_BB_6x5D : G_DropStackedItem_DC_6x5D {
   le_uint32_t unused3;
 } __packed__;
 
@@ -4140,7 +4215,7 @@ struct G_DropStackedItem_PC_V3_BB_6x5D {
 
 struct G_BuyShopItem_6x5E {
   G_ClientIDHeader header;
-  ItemData item;
+  ItemData item_data;
 } __packed__;
 
 // 6x5F: Drop item from box/enemy
@@ -4154,30 +4229,28 @@ struct G_DropItem_DC_6x5F {
   le_float z;
   le_uint16_t unknown_a1;
   le_uint16_t unknown_a2;
-  ItemData data;
+  ItemData item_data;
 } __packed__;
 
-struct G_DropItem_PC_V3_BB_6x5F {
-  G_DropItem_DC_6x5F basic_cmd;
+struct G_DropItem_PC_V3_BB_6x5F : G_DropItem_DC_6x5F {
   le_uint32_t unused3;
 } __packed__;
 
 // 6x60: Request for item drop (handled by the server on BB)
 
-struct G_EnemyDropItemRequest_DC_6x60 {
+struct G_StandardDropItemRequest_DC_6x60 {
   G_UnusedHeader header;
   uint8_t area;
   uint8_t rt_index;
-  le_uint16_t enemy_id;
+  le_uint16_t entity_id;
   le_float x;
   le_float z;
   le_uint16_t unknown_a1;
-  le_uint16_t unknown_a2;
+  le_uint16_t ignore_def;
 } __packed__;
 
-struct G_EnemyDropItemRequest_PC_V3_BB_6x60 {
-  G_EnemyDropItemRequest_DC_6x60 basic_cmd;
-  le_uint32_t unknown_a2;
+struct G_StandardDropItemRequest_PC_V3_BB_6x60 : G_StandardDropItemRequest_DC_6x60 {
+  le_float unknown_a2;
 } __packed__;
 
 // 6x61: Feed MAG
@@ -4191,7 +4264,7 @@ struct G_FeedMAG_6x61 {
 // 6x62: Unknown
 // This subcommand is completely ignored (at least, by PSO GC).
 
-// 6x63: Destroy item on the ground (used when too many items have been dropped)
+// 6x63: Destroy ground item (used when too many items have been dropped)
 
 struct G_DestroyGroundItem_6x63 {
   G_UnusedHeader header;
@@ -4223,7 +4296,7 @@ struct G_CreateEnemySet_6x67 {
   le_uint32_t unused2;
 } __packed__;
 
-// 6x68: Telepipe/Ryuker
+// 6x68: Create telepipe / cast Ryuker
 
 struct G_CreateTelepipe_6x68 {
   G_UnusedHeader header;
@@ -4237,9 +4310,9 @@ struct G_CreateTelepipe_6x68 {
   le_uint32_t unused3;
 } __packed__;
 
-// 6x69: Unknown (supported; game only)
+// 6x69: Create NPC
 
-struct G_Unknown_6x69 {
+struct G_CreateNPC_6x69 {
   G_UnusedHeader header;
   le_uint16_t client_id2;
   le_uint16_t unknown_a1;
@@ -4247,9 +4320,9 @@ struct G_Unknown_6x69 {
   le_uint16_t unknown_a2;
 } __packed__;
 
-// 6x6A: Unknown (supported; game only; not valid on Episode 3)
+// 6x6A: Use boss warp (not valid on Episode 3)
 
-struct G_Unknown_6x6A {
+struct G_UseBossWarp_6x6A {
   G_ClientIDHeader header;
   le_uint16_t unknown_a1;
   le_uint16_t unused;
@@ -4313,10 +4386,9 @@ struct G_SyncItemState_6x6D_Decompressed {
     // item is dropped. The last item dropped in each area has drop_number equal
     // to total_items_dropped_per_area[area - 1] - 1.
     le_uint16_t drop_number;
-    ItemData data;
+    ItemData item_data;
   } __packed__;
-  // Variable-length field follows:
-  // FloorItem items[sum(floor_item_count_per_area)];
+  FloorItem items[0]; // sum(floor_item_count_per_area) of them, actually
 } __packed__;
 
 // 6x6E: Sync flag state (used while loading into game)
@@ -4346,7 +4418,7 @@ struct G_Unknown_6x6F {
 // Annoyingly, they didn't use the same format as the 65/67/68 commands here,
 // and instead rearranged a bunch of things.
 
-struct G_SyncPlayerDispAndInventory_6x70 {
+struct G_SyncPlayerDispAndInventory_V3_6x70 {
   G_ExtendedHeader<G_UnusedHeader> header;
   // Offsets in this struct are relative to the overall command header
   /* 000C */ parray<le_uint16_t, 2> unknown_a1;
@@ -4413,9 +4485,9 @@ struct G_Unknown_6x71 {
   G_UnusedHeader header;
 } __packed__;
 
-// 6x72: Unknown (used while loading into game)
+// 6x72: Player done loading into game
 
-struct G_Unknown_6x72 {
+struct G_DoneLoadingIntoGame_6x72 {
   G_UnusedHeader header;
 } __packed__;
 
@@ -4436,17 +4508,16 @@ struct G_WordSelect_6x74 {
   le_uint32_t unknown_a4;
 } __packed__;
 
-// 6x75: Phase setup (supported; game only)
+// 6x75: Set quest flag
 
-// TODO: Not sure about PC format here. Is this first struct DC-only?
-struct G_PhaseSetup_DC_PC_6x75 {
+struct G_SetQuestFlag_DC_PC_6x75 {
   G_UnusedHeader header;
-  le_uint16_t phase; // Must be < 0x400
-  le_uint16_t unknown_a1; // Must be 0 or 1
+  le_uint16_t flag; // Must be < 0x400
+  le_uint16_t action; // 0 = set flag, 1 = clear flag
 } __packed__;
 
-struct G_PhaseSetup_V3_BB_6x75 {
-  G_PhaseSetup_DC_PC_6x75 basic_cmd;
+struct G_SetQuestFlag_V3_BB_6x75 {
+  G_SetQuestFlag_DC_PC_6x75 basic_cmd;
   le_uint16_t difficulty;
   le_uint16_t unused;
 } __packed__;
@@ -4501,9 +4572,9 @@ struct G_Unknown_6x7B {
   G_ClientIDHeader header;
 } __packed__;
 
-// 6x7C: Unknown (supported; game only; not valid on Episode 3)
+// 6x7C: Set challenge mode data (not valid on Episode 3)
 
-struct G_Unknown_6x7C {
+struct G_SetChallengeModeData_6x7C {
   G_UnusedHeader header;
   le_uint16_t client_id;
   parray<uint8_t, 2> unknown_a1;
@@ -4526,9 +4597,9 @@ struct G_Unknown_6x7C {
   Entry entries[3];
 } __packed__;
 
-// 6x7D: Unknown (supported; game only; not valid on Episode 3)
+// 6x7D: Set battle mode data (not valid on Episode 3)
 
-struct G_Unknown_6x7D {
+struct G_SetBattleModeData_6x7D {
   G_UnusedHeader header;
   uint8_t unknown_a1; // Must be < 7; used in jump table
   parray<uint8_t, 3> unused;
@@ -4601,22 +4672,22 @@ struct G_HitDestructibleObject_6x86 {
   le_uint16_t unknown_a4;
 } __packed__;
 
-// 6x87: Unknown
+// 6x87: Shrink player
 
-struct G_Unknown_6x87 {
+struct G_ShrinkPlayer_6x87 {
   G_ClientIDHeader header;
   le_float unknown_a1;
 } __packed__;
 
-// 6x88: Unknown (supported; game only)
+// 6x88: Restore shrunken player
 
-struct G_Unknown_6x88 {
+struct G_RestoreShrunkenPlayer_6x88 {
   G_ClientIDHeader header;
 } __packed__;
 
-// 6x89: Unknown (supported; game only)
+// 6x89: Player killed by monster
 
-struct G_Unknown_6x89 {
+struct G_PlayerKilledByMonster_6x89 {
   G_ClientIDHeader header;
   le_uint16_t unknown_a1;
   le_uint16_t unused;
@@ -4636,6 +4707,8 @@ struct G_Unknown_6x8A {
 // This subcommand is completely ignored (at least, by PSO GC).
 
 // 6x8D: Set technique level override
+// This command is sent immediately before 6x47 if the technique level is above
+// 15. Presumably this was done for some backward-compatibility reason.
 
 struct G_SetTechniqueLevelOverride_6x8D {
   G_ClientIDHeader header;
@@ -4682,9 +4755,9 @@ struct G_Unknown_6x92 {
   le_float unknown_a2;
 } __packed__;
 
-// 6x93: Timed switch activated (not valid on Episode 3)
+// 6x93: Activate timed switch (not valid on Episode 3)
 
-struct G_TimedSwitchActivated_6x93 {
+struct G_ActivateTimedSwitch_6x93 {
   G_UnusedHeader header;
   le_uint16_t area;
   le_uint16_t switch_id;
@@ -4769,18 +4842,18 @@ struct G_Unknown_6x9D {
 // 6x9E: Unknown (not valid on Episode 3)
 // This subcommand is completely ignored (at least, by PSO GC).
 
-// 6x9F: Gal Gryphon actions (not valid on PC or Episode 3)
+// 6x9F: Gal Gryphon boss actions (not valid on pre-V3 or Episode 3)
 
-struct G_GalGryphonActions_6x9F {
+struct G_GalGryphonBossActions_6x9F {
   G_EnemyIDHeader header;
   le_uint32_t unknown_a1;
   le_float unknown_a2;
   le_float unknown_a3;
 } __packed__;
 
-// 6xA0: Gal Gryphon actions (not valid on PC or Episode 3)
+// 6xA0: Gal Gryphon boss actions (not valid on pre-V3 or Episode 3)
 
-struct G_GalGryphonActions_6xA0 {
+struct G_GalGryphonBossActions_6xA0 {
   G_EnemyIDHeader header;
   le_float x;
   le_float y;
@@ -4791,56 +4864,47 @@ struct G_GalGryphonActions_6xA0 {
   parray<le_uint32_t, 4> unknown_a4;
 } __packed__;
 
-// 6xA1: Unknown (not valid on PC)
+// 6xA1: Unknown (not valid on pre-V3)
+// Part of revive process. Occurs right after revive command; function unclear.
 
 struct G_Unknown_6xA1 {
   G_ClientIDHeader header;
 } __packed__;
 
-// 6xA2: Request for item drop from box (not valid on PC; handled by server on BB)
+// 6xA2: Specializable item drop request (not valid on pre-V3; handled by
+// server on BB)
 
-struct G_BoxItemDropRequest_6xA2 {
-  G_UnusedHeader header;
-  uint8_t area;
-  uint8_t unknown_a1;
-  le_uint16_t request_id;
-  le_float x;
-  le_float z;
-  le_uint16_t unknown_a2;
-  le_uint16_t unknown_a3;
-  parray<uint8_t, 4> unknown_a4;
-  le_uint32_t unknown_a5;
-  le_uint32_t unknown_a6;
-  le_uint32_t unknown_a7;
-  le_uint32_t unknown_a8;
+struct G_SpecializableItemDropRequest_6xA2 : G_StandardDropItemRequest_PC_V3_BB_6x60 {
+  le_float def_a1;
+  parray<le_uint32_t, 3> def;
 } __packed__;
 
-// 6xA3: Episode 2 boss actions (not valid on PC or Episode 3)
+// 6xA3: Olga Flow boss actions (not valid on pre-V3 or Episode 3)
 
-struct G_Episode2BossActions_6xA3 {
+struct G_OlgaFlowBossActions_6xA3 {
   G_EnemyIDHeader header;
   uint8_t unknown_a1;
   uint8_t unknown_a2;
   parray<uint8_t, 2> unknown_a3;
 } __packed__;
 
-// 6xA4: Olga Flow phase 1 actions (not valid on PC or Episode 3)
+// 6xA4: Olga Flow phase 1 boss actions (not valid on pre-V3 or Episode 3)
 
-struct G_OlgaFlowPhase1Actions_6xA4 {
+struct G_OlgaFlowPhase1BossActions_6xA4 {
   G_EnemyIDHeader header;
   uint8_t what;
   parray<uint8_t, 3> unknown_a3;
 } __packed__;
 
-// 6xA5: Olga Flow phase 2 actions (not valid on PC or Episode 3)
+// 6xA5: Olga Flow phase 2 boss actions (not valid on pre-V3 or Episode 3)
 
-struct G_OlgaFlowPhase2Actions_6xA5 {
+struct G_OlgaFlowPhase2BossActions_6xA5 {
   G_EnemyIDHeader header;
   uint8_t what;
   parray<uint8_t, 3> unknown_a3;
 } __packed__;
 
-// 6xA6: Modify trade proposal (not valid on PC)
+// 6xA6: Modify trade proposal (not valid on pre-V3)
 
 struct G_ModifyTradeProposal_6xA6 {
   G_ClientIDHeader header;
@@ -4851,36 +4915,36 @@ struct G_ModifyTradeProposal_6xA6 {
   le_uint32_t unknown_a5;
 } __packed__;
 
-// 6xA7: Unknown (not valid on PC)
+// 6xA7: Unknown (not valid on pre-V3)
 // This subcommand is completely ignored (at least, by PSO GC).
 
-// 6xA8: Gol Dragon actions (not valid on PC or Episode 3)
+// 6xA8: Gol Dragon boss actions (not valid on pre-V3 or Episode 3)
 
-struct G_GolDragonActions_6xA8 {
+struct G_GolDragonBossActions_6xA8 {
   G_EnemyIDHeader header;
   le_uint16_t unknown_a1;
   le_uint16_t unknown_a2;
   le_uint32_t unknown_a3;
 } __packed__;
 
-// 6xA9: Barba Ray actions (not valid on PC or Episode 3)
+// 6xA9: Barba Ray boss actions (not valid on pre-V3 or Episode 3)
 
-struct G_BarbaRayActions_6xA9 {
+struct G_BarbaRayBossActions_6xA9 {
   G_EnemyIDHeader header;
   le_uint16_t unknown_a1;
   le_uint16_t unknown_a2;
 } __packed__;
 
-// 6xAA: Episode 2 boss actions (not valid on PC or Episode 3)
+// 6xAA: Barba Ray boss actions (not valid on pre-V3 or Episode 3)
 
-struct G_Episode2BossActions_6xAA {
+struct G_BarbaRayBossActions_6xAA {
   G_EnemyIDHeader header;
   le_uint16_t unknown_a1;
   le_uint16_t unknown_a2;
   le_uint32_t unknown_a3;
 } __packed__;
 
-// 6xAB: Create lobby chair (not valid on PC)
+// 6xAB: Create lobby chair (not valid on pre-V3)
 
 struct G_CreateLobbyChair_6xAB {
   G_ClientIDHeader header;
@@ -4888,7 +4952,7 @@ struct G_CreateLobbyChair_6xAB {
   le_uint16_t unknown_a2;
 } __packed__;
 
-// 6xAC: Unknown (not valid on PC)
+// 6xAC: Unknown (not valid on pre-V3)
 
 struct G_Unknown_6xAC {
   G_ClientIDHeader header;
@@ -4896,9 +4960,10 @@ struct G_Unknown_6xAC {
   parray<le_uint32_t, 0x1E> item_ids;
 } __packed__;
 
-// 6xAD: Unknown (not valid on PC, Episode 3, or GC Trial Edition)
+// 6xAD: Olga Flow subordinate boss actions (not valid on pre-V3, Episode 3, or
+// GC Trial Edition)
 
-struct G_Unknown_6xAD {
+struct G_OlgaFlowSubordinateBossActions_6xAD {
   G_UnusedHeader header;
   // The first byte in this array seems to have a special meaning
   parray<uint8_t, 0x40> unknown_a1;
@@ -4915,24 +4980,24 @@ struct G_SetLobbyChairState_6xAE {
   le_uint32_t unknown_a4;
 } __packed__;
 
-// 6xAF: Turn lobby chair (not valid on PC or GC Trial Edition)
+// 6xAF: Turn lobby chair (not valid on pre-V3 or GC Trial Edition)
 
 struct G_TurnLobbyChair_6xAF {
   G_ClientIDHeader header;
   le_uint32_t angle; // In range [0x0000, 0xFFFF]
 } __packed__;
 
-// 6xB0: Move lobby chair (not valid on PC or GC Trial Edition)
+// 6xB0: Move lobby chair (not valid on pre-V3 or GC Trial Edition)
 
 struct G_MoveLobbyChair_6xB0 {
   G_ClientIDHeader header;
   le_uint32_t unknown_a1;
 } __packed__;
 
-// 6xB1: Unknown (not valid on PC or GC Trial Edition)
+// 6xB1: Unknown (not valid on pre-V3 or GC Trial Edition)
 // This subcommand is completely ignored (at least, by PSO GC).
 
-// 6xB2: Unknown (not valid on PC or GC Trial Edition)
+// 6xB2: Unknown (not valid on pre-V3 or GC Trial Edition)
 // TODO: It appears this command is sent when the snapshot file is written on
 // PSO GC. Verify this.
 
@@ -4952,12 +5017,6 @@ struct G_Unknown_6xB2 {
 // where Y = 3, 4, 5, or 6, and ZZ is any byte. The formats of these
 // subsubcommands are described at the end of this file.
 
-// Unlike all other 6x subcommands, the 6xB3 subcommand is sent to the server in
-// a CA command instead of a 6x, C9, or CB command. (For this reason, we refer
-// to 6xB3xZZ commands as CAxZZ commands as well.) The server is expected to
-// reply to CA commands instead of forwarding them. The logic for doing so is
-// primarily implemented in Episode3/Server.cc and the surrounding classes.
-
 // The common format for CARD battle subcommand headers is:
 struct G_CardBattleCommandHeader {
   uint8_t subcommand = 0x00;
@@ -4974,10 +5033,16 @@ struct G_CardBattleCommandHeader {
   uint8_t unused2 = 0x00;
 } __packed__;
 
-// The 6xB3 subcommand has a longer header, which is common to all CAx
-// subcommands.
+// Unlike all other 6x subcommands, the 6xB3 subcommand is sent to the server in
+// a CA command instead of a 6x, C9, or CB command. (For this reason, we refer
+// to 6xB3xZZ commands as CAxZZ commands as well.) The server is expected to
+// reply to CA commands instead of forwarding them. The logic for doing so is
+// primarily implemented in Episode3/Server.cc and the surrounding classes.
+
+// The 6xB3 subcommand has a longer header than 6xB4 and 6xB5. This header is
+// common to all 6xB3x (CAx) subcommands.
 struct G_CardServerDataCommandHeader {
-  uint8_t subcommand = 0x00;
+  uint8_t subcommand = 0xB3;
   uint8_t size = 0x00;
   le_uint16_t unused1 = 0x0000;
   uint8_t subsubcommand = 0x00; // See 6xBx subcommand table (after this table)
@@ -4989,8 +5054,10 @@ struct G_CardServerDataCommandHeader {
 } __packed__;
 
 // 6xB4: Unknown (XBOX)
+
 // 6xB4: CARD battle server response (Episode 3) - see 6xB3 (above)
 // 6xB5: CARD battle client command (Episode 3) - see 6xB3 (above)
+
 // 6xB5: BB shop request (handled by the server)
 
 struct G_ShopContentsRequest_BB_6xB5 {
@@ -5038,7 +5105,7 @@ struct G_ShopContents_BB_6xB6 {
   uint8_t num_items;
   le_uint16_t unused;
   // Note: data2d of these entries should be the price
-  ItemData entries[20];
+  ItemData item_datas[20];
 } __packed__;
 
 // 6xB7: Alias for 6xB3 (Episode 3 Trial Edition)
@@ -5075,7 +5142,7 @@ struct G_AcceptItemIdentification_BB_6xB8 {
 
 struct G_IdentifyResult_BB_6xB9 {
   G_ClientIDHeader header;
-  ItemData item;
+  ItemData item_data;
 } __packed__;
 
 // 6xBA: Sync card trade state (Episode 3)
@@ -5178,7 +5245,7 @@ struct G_SoundChat_GC_Ep3_6xBE {
 
 struct G_CreateInventoryItem_BB_6xBE {
   G_ClientIDHeader header;
-  ItemData item;
+  ItemData item_data;
   le_uint32_t unused;
 } __packed__;
 
@@ -5204,14 +5271,21 @@ struct G_SellItemAtShop_BB_6xC0 {
   le_uint32_t amount;
 } __packed__;
 
-// 6xC1: Unknown (BB)
-// 6xC2: Unknown (BB)
+// 6xC1: Invite to team (BB)
+// 6xC2: Accept invitation to team (BB)
+
+struct G_TeamInvitationAction_BB_6xC1_6xC2_6xCD_6xCE {
+  G_ClientIDHeader header;
+  le_uint32_t guild_card_number;
+  le_uint32_t action; // 0 or 1 for 6xC1, 2 (or not 2) for 6xC2
+  parray<uint8_t, 0x54> unknown_a1;
+} __packed__;
 
 // 6xC3: Split stacked item (BB; handled by the server)
 // Note: This is not sent if an entire stack is dropped; in that case, a normal
 // item drop subcommand is generated instead.
 
-struct G_SplitStackedItem_6xC3 {
+struct G_SplitStackedItem_BB_6xC3 {
   G_ClientIDHeader header;
   le_uint16_t area;
   le_uint16_t unused2;
@@ -5223,51 +5297,147 @@ struct G_SplitStackedItem_6xC3 {
 
 // 6xC4: Sort inventory (BB; handled by the server)
 
-struct G_SortInventory_6xC4 {
+struct G_SortInventory_BB_6xC4 {
   G_UnusedHeader header;
   le_uint32_t item_ids[30];
 } __packed__;
 
 // 6xC5: Medical center used (BB)
-// 6xC6: Invalid subcommand
-// 6xC7: Invalid subcommand
+
+// 6xC6: Steal experience (BB)
+
+struct G_StealEXP_BB_6xC6 {
+  G_ClientIDHeader header;
+  uint8_t unknown_a1;
+  uint8_t unknown_a2;
+  le_uint16_t enemy_id;
+} __packed__;
+
+// 6xC7: Charge attack (BB)
+
+struct G_ChargeAttack_BB_6xC7 {
+  G_ClientIDHeader header;
+  // Tethealla (at least, the ancient public version of it) treats this as
+  // signed, and gives the player money in that case. We don't do so.
+  le_uint32_t meseta_amount;
+} __packed__;
 
 // 6xC8: Enemy killed (BB; handled by the server)
 
-struct G_EnemyKilled_6xC8 {
+struct G_EnemyKilled_BB_6xC8 {
   G_EnemyIDHeader header;
   le_uint16_t enemy_id;
   le_uint16_t killer_client_id;
   le_uint32_t unused;
 } __packed__;
 
-// 6xC9: Invalid subcommand
-// 6xCA: Invalid subcommand
-// 6xCB: Unknown (BB)
-// 6xCC: Unknown (BB)
-// 6xCD: Unknown (BB)
-// 6xCE: Unknown (BB)
-// 6xCF: Unknown (BB; supported; game only; handled by the server)
-// 6xD0: Invalid subcommand
-// 6xD1: Invalid subcommand
-// 6xD2: Unknown (BB)
+// 6xC9: Request meseta reward from quest (BB; handled by server)
+
+struct G_MesetaRewardRequest_BB_6xC9 {
+  G_UnusedHeader header;
+  le_int32_t amount;
+} __packed__;
+
+// 6xCA: Item reward from quest (BB; handled by server)
+
+struct G_ItemRewardRequest_BB_6xCA {
+  G_UnusedHeader header;
+  ItemData item_data;
+} __packed__;
+
+// 6xCB: Request to transfer item (BB)
+
+struct G_ItemTransferRequest_BB_6xCB {
+  G_ClientIDHeader header;
+  le_uint32_t unknown_a1;
+  le_uint32_t unknown_a2;
+} __packed__;
+
+// 6xCC: Exchange item for team points (BB)
+
+struct G_ExchangeItemForTeamPoints_BB_6xCC {
+  G_ClientIDHeader header;
+  le_uint32_t item_id;
+  le_uint32_t unknown_a2;
+} __packed__;
+
+// 6xCD: Transfer master (BB)
+// Same format as 6xC1
+
+// 6xCE: Accept master transfer (BB)
+// Same format as 6xC1
+
+// 6xCF: Restart battle (BB)
+
+// 6xD0: Battle mode level up (BB; handled by server)
+// 6xD1: Challenge mode grave (BB; handled by server)
+
+// 6xD2: Set quest data 2 (BB)
+// Writes 4 bytes to the 32-bit field specified by index.
+
+struct G_SetQuestData2_BB_6xD2 {
+  G_ClientIDHeader header;
+  le_uint32_t index;
+  le_uint32_t value;
+} __packed__;
+
 // 6xD3: Invalid subcommand
+
 // 6xD4: Unknown (BB)
-// 6xD5: Invalid subcommand
-// 6xD6: Invalid subcommand
-// 6xD7: Invalid subcommand
-// 6xD8: Invalid subcommand
-// 6xD9: Invalid subcommand
-// 6xDA: Invalid subcommand
-// 6xDB: Unknown (BB)
-// 6xDC: Unknown (BB)
-// 6xDD: Unknown (BB)
-// 6xDE: Invalid subcommand
-// 6xDF: Invalid subcommand
-// 6xE0: Invalid subcommand
-// 6xE1: Invalid subcommand
-// 6xE2: Invalid subcommand
+
+struct G_Unknown_BB_6xD4 {
+  G_UnusedHeader header;
+  le_uint16_t action; // Must be in [0, 4]
+  uint8_t unknown_a1; // Must be in [0, 15]
+  uint8_t unused;
+  // THe format is not fully known; there are likely more fields here.
+} __packed__;
+
+// 6xD5: Exchange item in quest (BB; handled by server)
+// 6xD6: Wrap item (BB; handled by server)
+// 6xD7: Paganini Photon Drop exchange (BB; handled by server)
+// 6xD8: Add S-rank weapon special (BB; handled by server)
+// 6xD9: Momoka item exchange (BB; handled by server)
+// 6xDA: Upgrade weapon attribute (BB; handled by server)
+
+// 6xDB: Exchange item in quest (BB)
+
+struct G_ExchangeItemInQuest_BB_6xDB {
+  G_ClientIDHeader header;
+  le_uint32_t unknown_a1;
+  le_uint32_t unknown_a2;
+  le_uint32_t unknown_a3;
+} __packed__;
+
+// 6xDC: Saint-Million boss actions (BB)
+
+struct G_SaintMillionBossActions_BB_6xDC {
+  G_UnusedHeader header;
+  le_uint16_t unknown_a1;
+  le_uint16_t unknown_a2;
+} __packed__;
+
+// 6xDD: Set EXP multiplier (BB)
+// header.param specifies the EXP multiplier. It is 1-based, so the value 2
+// means all EXP is doubled, for example.
+
+struct G_SetEXPMultiplier_BB_6xDD {
+  G_ParameterHeader header;
+} __packed__;
+
+// 6xDE: Good Luck quest (BB; handled by server)
+// 6xDF: Black Paper's Deal Photon Drop exchange (BB; handled by server)
+// 6xE0: Black Paper's Deal rewards (BB; handled by server)
+// 6xE1: Gallon's Plan quest (BB; handled by server)
+// 6xE2: Coren actions (BB)
+
 // 6xE3: Unknown (BB)
+
+struct G_Unknown_BB_6xE3 {
+  G_ClientIDHeader header;
+  ItemData item_data;
+} __packed__;
+
 // 6xE4: Invalid subcommand
 // 6xE5: Invalid subcommand
 // 6xE6: Invalid subcommand

@@ -522,10 +522,15 @@ void ClientGameData::import_player(const PSOPlayerDataDCPC& pd) {
   // auto_reply = pd.auto_reply;
 }
 
-void ClientGameData::import_player(const PSOPlayerDataV3& gc) {
+void ClientGameData::import_player(const PSOPlayerDataV3& gc, bool is_gc) {
   auto account = this->account();
   auto player = this->player();
   player->inventory = gc.inventory;
+  if (is_gc) {
+    for (size_t z = 0; z < 30; z++) {
+      player->inventory.items[z].data.bswap_data2_if_mag();
+    }
+  }
   player->disp = gc.disp.to_bb();
   player->info_board = gc.info_board;
   account->blocked_senders = gc.blocked_senders;
@@ -857,7 +862,7 @@ size_t PlayerInventory::find_equipped_weapon() const {
     }
   }
   if (ret < 0) {
-    throw runtime_error("no weapon is equipped");
+    throw out_of_range("no weapon is equipped");
   }
   return ret;
 }
@@ -878,7 +883,7 @@ size_t PlayerInventory::find_equipped_armor() const {
     }
   }
   if (ret < 0) {
-    throw runtime_error("no armor is equipped");
+    throw out_of_range("no armor is equipped");
   }
   return ret;
 }
@@ -899,7 +904,7 @@ size_t PlayerInventory::find_equipped_mag() const {
     }
   }
   if (ret < 0) {
-    throw runtime_error("no mag is equipped");
+    throw out_of_range("no mag is equipped");
   }
   return ret;
 }

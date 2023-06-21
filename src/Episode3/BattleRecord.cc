@@ -187,11 +187,9 @@ void BattleRecord::add_chat_message(
 
 bool BattleRecord::is_map_definition_event(const Event& ev) {
   if (ev.type == Event::Type::BATTLE_COMMAND) {
-    auto& header = check_size_t<G_CardBattleCommandHeader>(
-        ev.data, sizeof(G_CardBattleCommandHeader), 0xFFFF);
+    auto& header = check_size_t<G_CardBattleCommandHeader>(ev.data, 0xFFFF);
     if (header.subcommand == 0xB6) {
-      auto& header = check_size_t<G_MapSubsubcommand_GC_Ep3_6xB6>(
-          ev.data, sizeof(G_MapSubsubcommand_GC_Ep3_6xB6), 0xFFFF);
+      auto& header = check_size_t<G_MapSubsubcommand_GC_Ep3_6xB6>(ev.data, 0xFFFF);
       if (header.subsubcommand == 0x41) {
         return true;
       }
@@ -316,7 +314,7 @@ void BattleRecordPlayer::schedule_events() {
 
     if (this->event_it == this->record->events.end()) {
       if (relative_ts >= this->record->battle_end_timestamp) {
-        // If the record is complete and the end timestamp has been reached, so
+        // If the record is complete and the end timestamp has been reached,
         // send exit commands to all players in the lobby, and don't reschedule
         // the event (it will be deleted along with the Player when the lobby is
         // destroyed, when the last client leaves)
