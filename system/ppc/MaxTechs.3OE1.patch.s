@@ -39,6 +39,9 @@ run:
     # r5 contains the address of the player's character struct
     lwzx r5, [r3 + r4]
 
+    # add tech offset to character address
+    addi r5, 0x470
+
     # loop iterator
     li r3, 0
 apply_loop:
