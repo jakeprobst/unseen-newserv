@@ -51,7 +51,8 @@ With that said, I offer no guarantees on how or when this project will advance. 
 
 Current known issues / missing features / things to do:
 - Implement the rest of PSOBB. Major areas of work:
-    - Find any remaining mismatches in enemy IDs / experience (Episode 1 is mostly fixed now, except for Dark Falz)
+    - Find any remaining mismatches in enemy IDs / experience
+    - Sale prices for non-rare weapons with specials are computed incorrectly when buying/selling at shops
     - Replace enemy list, game episode, etc. with quest data when loading a quest
     - Implement trade window
     - Fix some edge cases on the BB proxy server (e.g. make sure Change Ship does the right thing, which is not the same as what it should do on other versions).
@@ -309,13 +310,13 @@ Some commands only work on the game server and not on the proxy server. The chat
     * `$playrec <name>`: Play a battle recording. This command creates a spectator team and replays the specified battle log within it. There is a known issue which causes spectators to crash in some cases, so use of this command is currently not recommended.
 
 * Cheat mode commands
-    * `$cheat`: Enables or disables cheat mode for the current game. All other cheat mode commands do nothing if cheat mode is disabled. This command does nothing on the proxy server - cheat commands are always available there.
+    * `$cheat`: Enables or disables cheat mode for the current game. All other cheat mode commands do nothing if cheat mode is disabled. By default, cheat mode is off in new games but can be enabled; there is an option in config.json that allows you to disable cheat mode entirely, or set it to on by default in new games.
     * `$infhp` / `$inftp`: Enables or disables infinite HP or TP mode. Applies to only you. In infinite HP mode, one-hit KO attacks will still kill you.
     * `$warpme <area-id>`: Warps yourself to the given area.
     * `$warpall <area-id>`: Warps everyone in the game to the given area. You must be the leader to use this command, unless you're on the proxy server.
     * `$next`: Warps yourself to the next area.
     * `$swa`: Enables or disables switch assist. When enabled, the server will attempt to automatically unlock two-player doors in solo games if you step on both switches sequentially.
-    * `$item <data>` (or `$i <data>`): Create an item. Item codes are 16 hex bytes; at least 2 bytes must be specified, and all unspecified bytes are zeroes. If you are on the proxy server, you must not be using Blue Burst for this command to work. On the game server, this command works for all versions.
+    * `$item <desc>` (or `$i <desc>`): Create an item. `desc` may be a description of the item (e.g. "Hell Saber +5 0/10/25/0/10") or a string of hex data specifying the item code. Item codes are 16 hex bytes; at least 2 bytes must be specified, and all unspecified bytes are zeroes. If you are on the proxy server, you must not be using Blue Burst for this command to work. On the game server, this command works for all versions.
 
 * Configuration commands
     * `$event <event>`: Sets the current holiday event in the current lobby. Holiday events are documented in the "Using $event" item in the information menu. If you're on the proxy server, this applies to all lobbies and games you join, but only you will see the new event - other players will not.
@@ -387,7 +388,7 @@ newserv has many CLI options, which can be used to access functionality other th
 * Compress or decompress data in the PRS and BC0 formats (`compress-prs`, `compress-bc0`, `decompress-prs`, `decompress-bc0`)
 * Compute the decompressed size of compressed PRS data without decompressing it (`prs-size`)
 * Encrypt or decrypt data using any PSO version's network encryption scheme (`encrypt-data`, `decrypt-data`)
-* Encrypt or decrypt data using Episode 3's trivial scheme (`decrypt-trivial-data`)
+* Encrypt or decrypt data using Episode 3's trivial scheme (`encrypt-trivial-data`, `decrypt-trivial-data`)
 * Encrypt or decrypt PSO GC save data (.gci files) (`encrypt-gci-save`, `decrypt-gci-save`)
 * Find the likely round1 or round2 seed for a corrupt save file (`salvage-gci`)
 * Run a brute-force search for a decryption seed (`find-decryption-seed`)

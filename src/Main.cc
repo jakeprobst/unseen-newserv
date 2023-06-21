@@ -118,11 +118,12 @@ The actions are:\n\
     For non-BB ciphers, the --big-endian option applies the cipher masks as\n\
     big-endian instead of little-endian, which is necessary for some GameCube\n\
     file formats.\n\
-  decrypt-trivial-data [--seed=SEED] [INPUT-FILENAME [OUTPUT-FILENAME]]\n\
-    Decrypt (or encrypt; the algorithm is symmetric) data using the Episode 3\n\
-    trivial algorithm. If SEED is given, it should be specified as one hex\n\
-    byte. If SEED is not given, newserv will try all possible seeds and return\n\
-    the one that results in the greatest number of zero bytes in the output.\n\
+  encrypt-trivial-data [--seed=BASIS] [INPUT-FILENAME [OUTPUT-FILENAME]]\n\
+  decrypt-trivial-data [--seed=BASIS] [INPUT-FILENAME [OUTPUT-FILENAME]]\n\
+    Encrypt or decrypt data using the Episode 3 trivial algorithm. If BASIS is\n\
+    given, it should be specified as one hex byte. If BASIS is not given,\n\
+    newserv will try all possible values and return the one that results in the\n\
+    greatest number of zero bytes in the output.\n\
   encrypt-gci-save CRYPT-OPTION INPUT-FILENAME [OUTPUT-FILENAME]\n\
   decrypt-gci-save CRYPT-OPTION INPUT-FILENAME [OUTPUT-FILENAME]\n\
     Encrypt or decrypt a character or Guild Card file. If encrypting, the\n\
@@ -210,6 +211,7 @@ enum class Behavior {
   PRS_DISASSEMBLE,
   ENCRYPT_DATA,
   DECRYPT_DATA,
+  ENCRYPT_TRIVIAL_DATA,
   DECRYPT_TRIVIAL_DATA,
   ENCRYPT_GCI_SAVE,
   DECRYPT_GCI_SAVE,
@@ -219,10 +221,10 @@ enum class Behavior {
   DECODE_SJIS,
   EXTRACT_GSL,
   EXTRACT_BML,
-  FORMAT_ITEMRT_ENTRY,
   FORMAT_ITEMRT_REL,
   SHOW_EP3_DATA,
   DESCRIBE_ITEM,
+  ENCODE_ITEM,
   PARSE_OBJECT_GRAPH,
   REPLAY_LOG,
   CAT_CLIENT,
@@ -241,17 +243,18 @@ static bool behavior_takes_input_filename(Behavior b) {
       (b == Behavior::PRS_DISASSEMBLE) ||
       (b == Behavior::ENCRYPT_DATA) ||
       (b == Behavior::DECRYPT_DATA) ||
+      (b == Behavior::ENCRYPT_TRIVIAL_DATA) ||
       (b == Behavior::DECRYPT_TRIVIAL_DATA) ||
       (b == Behavior::DECRYPT_GCI_SAVE) ||
       (b == Behavior::SALVAGE_GCI) ||
       (b == Behavior::ENCRYPT_GCI_SAVE) ||
       (b == Behavior::DECODE_QUEST_FILE) ||
       (b == Behavior::DECODE_SJIS) ||
-      (b == Behavior::FORMAT_ITEMRT_ENTRY) ||
       (b == Behavior::FORMAT_ITEMRT_REL) ||
       (b == Behavior::EXTRACT_GSL) ||
       (b == Behavior::EXTRACT_BML) ||
       (b == Behavior::DESCRIBE_ITEM) ||
+      (b == Behavior::ENCODE_ITEM) ||
       (b == Behavior::PARSE_OBJECT_GRAPH) ||
       (b == Behavior::REPLAY_LOG) ||
       (b == Behavior::CAT_CLIENT) ||
@@ -265,6 +268,7 @@ static bool behavior_takes_output_filename(Behavior b) {
       (b == Behavior::DECOMPRESS_BC0) ||
       (b == Behavior::ENCRYPT_DATA) ||
       (b == Behavior::DECRYPT_DATA) ||
+      (b == Behavior::ENCRYPT_TRIVIAL_DATA) ||
       (b == Behavior::DECRYPT_TRIVIAL_DATA) ||
       (b == Behavior::DECRYPT_GCI_SAVE) ||
       (b == Behavior::ENCRYPT_GCI_SAVE) ||
@@ -395,6 +399,8 @@ int main(int argc, char** argv) {
           behavior = Behavior::ENCRYPT_DATA;
         } else if (!strcmp(argv[x], "decrypt-data")) {
           behavior = Behavior::DECRYPT_DATA;
+        } else if (!strcmp(argv[x], "encrypt-trivial-data")) {
+          behavior = Behavior::ENCRYPT_TRIVIAL_DATA;
         } else if (!strcmp(argv[x], "decrypt-trivial-data")) {
           behavior = Behavior::DECRYPT_TRIVIAL_DATA;
         } else if (!strcmp(argv[x], "decrypt-gci-save")) {
@@ -421,14 +427,14 @@ int main(int argc, char** argv) {
           quest_file_type = QuestFileFormat::QST;
         } else if (!strcmp(argv[x], "cat-client")) {
           behavior = Behavior::CAT_CLIENT;
-        } else if (!strcmp(argv[x], "format-itemrt-entry")) {
-          behavior = Behavior::FORMAT_ITEMRT_ENTRY;
         } else if (!strcmp(argv[x], "format-itemrt-rel")) {
           behavior = Behavior::FORMAT_ITEMRT_REL;
         } else if (!strcmp(argv[x], "show-ep3-data")) {
           behavior = Behavior::SHOW_EP3_DATA;
         } else if (!strcmp(argv[x], "describe-item")) {
           behavior = Behavior::DESCRIBE_ITEM;
+        } else if (!strcmp(argv[x], "encode-item")) {
+          behavior = Behavior::ENCODE_ITEM;
         } else if (!strcmp(argv[x], "parse-object-graph")) {
           behavior = Behavior::PARSE_OBJECT_GRAPH;
         } else if (!strcmp(argv[x], "replay-log")) {
@@ -637,6 +643,7 @@ int main(int argc, char** argv) {
       break;
     }
 
+    case Behavior::ENCRYPT_TRIVIAL_DATA:
     case Behavior::DECRYPT_TRIVIAL_DATA: {
       string data = read_input_data();
       uint8_t basis;
@@ -657,7 +664,8 @@ int main(int argc, char** argv) {
             best_seed_score = score;
           }
         }
-        fprintf(stderr, "Basis appears to be %02hhX\n", best_seed);
+        fprintf(stderr, "Basis appears to be %02hhX (%zu zero bytes in output)\n",
+            best_seed, best_seed_score);
         basis = best_seed;
       } else {
         basis = stoul(seed, nullptr, 16);
@@ -997,70 +1005,24 @@ int main(int argc, char** argv) {
       break;
     }
 
-    case Behavior::FORMAT_ITEMRT_ENTRY: {
-      string data = read_input_data();
-      if (data.size() < sizeof(RareItemSet::Table)) {
-        throw runtime_error("input data too small");
-      }
-      const auto& table = *reinterpret_cast<const RareItemSet::Table*>(data.data());
-
-      auto format_drop = +[](const RareItemSet::Table::Drop& r) -> string {
-        ItemData item;
-        item.data1[0] = r.item_code[0];
-        item.data1[1] = r.item_code[1];
-        item.data1[2] = r.item_code[2];
-        string name = item.name(false);
-
-        uint32_t expanded_probability = RareItemSet::expand_rate(r.probability);
-        auto frac = reduce_fraction<uint64_t>(expanded_probability, 0x100000000);
-        return string_printf(
-            "(%02hhX => %08" PRIX32 " => %" PRIu64 "/%" PRIu64 ") %02hhX%02hhX%02hhX (%s)",
-            r.probability, expanded_probability, frac.first, frac.second, r.item_code[0], r.item_code[1], r.item_code[2], name.c_str());
-      };
-
-      fprintf(stdout, "Monster rares:\n");
-      for (size_t z = 0; z < 0x65; z++) {
-        const auto& r = table.monster_rares[z];
-        if (r.item_code[0] == 0 && r.item_code[1] == 0 && r.item_code[2] == 0) {
-          continue;
-        }
-        string s = format_drop(r);
-        fprintf(stdout, "  %02zX: %s\n", z, s.c_str());
-      }
-
-      fprintf(stdout, "Box rares:\n");
-      for (size_t z = 0; z < 0x1E; z++) {
-        const auto& r = table.box_rares[z];
-        if (r.item_code[0] == 0 && r.item_code[1] == 0 && r.item_code[2] == 0) {
-          continue;
-        }
-        string s = format_drop(r);
-        fprintf(stdout, "  %02zX: area %02hhX %s\n", z, table.box_areas[z], s.c_str());
-      }
-      break;
-    }
-
     case Behavior::FORMAT_ITEMRT_REL: {
       shared_ptr<string> data(new string(read_input_data()));
       RELRareItemSet rs(data);
 
-      auto format_drop = +[](const RareItemSet::Table::Drop& r) -> string {
+      auto format_drop = +[](const RareItemSet::ExpandedDrop& r) -> string {
         ItemData item;
         item.data1[0] = r.item_code[0];
         item.data1[1] = r.item_code[1];
         item.data1[2] = r.item_code[2];
         string name = item.name(false);
 
-        uint32_t expanded_probability = RareItemSet::expand_rate(r.probability);
-        auto frac = reduce_fraction<uint64_t>(expanded_probability, 0x100000000);
+        auto frac = reduce_fraction<uint64_t>(r.probability, 0x100000000);
         return string_printf(
-            "(%02hhX => %08" PRIX32 " => %" PRIu64 "/%" PRIu64 ") %02hhX%02hhX%02hhX (%s)",
-            r.probability, expanded_probability, frac.first, frac.second, r.item_code[0], r.item_code[1], r.item_code[2], name.c_str());
+            "(%08" PRIX32 " => %" PRIu64 "/%" PRIu64 ") %02hhX%02hhX%02hhX (%s)",
+            r.probability, frac.first, frac.second, r.item_code[0], r.item_code[1], r.item_code[2], name.c_str());
       };
 
       auto print_collection = [&](GameMode mode, Episode episode, uint8_t difficulty, uint8_t section_id) -> void {
-        const auto& table = rs.get_table(episode, mode, difficulty, section_id);
-
         string secid_name = name_for_section_id(section_id);
         fprintf(stdout, "%s %s %s %s\n",
             name_for_mode(mode),
@@ -1070,22 +1032,18 @@ int main(int argc, char** argv) {
 
         fprintf(stdout, "  Monster rares:\n");
         for (size_t z = 0; z < 0x65; z++) {
-          const auto& r = table.monster_rares[z];
-          if (r.item_code[0] == 0 && r.item_code[1] == 0 && r.item_code[2] == 0) {
-            continue;
+          for (const auto& spec : rs.get_enemy_specs(mode, episode, difficulty, section_id, z)) {
+            string s = format_drop(spec);
+            fprintf(stdout, "    %02zX: %s\n", z, s.c_str());
           }
-          string s = format_drop(r);
-          fprintf(stdout, "    %02zX: %s\n", z, s.c_str());
         }
 
         fprintf(stdout, "  Box rares:\n");
-        for (size_t z = 0; z < 0x1E; z++) {
-          const auto& r = table.box_rares[z];
-          if (r.item_code[0] == 0 && r.item_code[1] == 0 && r.item_code[2] == 0) {
-            continue;
+        for (size_t area = 0; area < 0x12; area++) {
+          for (const auto& spec : rs.get_box_specs(mode, episode, difficulty, section_id, area)) {
+            string s = format_drop(spec);
+            fprintf(stdout, "    (area %02zX) %s\n", area, s.c_str());
           }
-          string s = format_drop(r);
-          fprintf(stdout, "    %02zX: area %02hhX %s\n", z, table.box_areas[z], s.c_str());
         }
       };
 
@@ -1119,6 +1077,18 @@ int main(int argc, char** argv) {
 
       string desc = item.name(false);
       log_info("Item: %s", desc.c_str());
+      break;
+    }
+
+    case Behavior::ENCODE_ITEM: {
+      ItemData item(input_filename);
+      string desc = item.name(false);
+      log_info("Data: %02hhX%02hhX%02hhX%02hhX %02hhX%02hhX%02hhX%02hhX %02hhX%02hhX%02hhX%02hhX -------- %02hhX%02hhX%02hhX%02hhX",
+          item.data1[0], item.data1[1], item.data1[2], item.data1[3],
+          item.data1[4], item.data1[5], item.data1[6], item.data1[7],
+          item.data1[8], item.data1[9], item.data1[10], item.data1[11],
+          item.data2[0], item.data2[1], item.data2[2], item.data2[3]);
+      log_info("Description: %s", desc.c_str());
       break;
     }
 

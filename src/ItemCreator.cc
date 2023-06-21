@@ -31,8 +31,6 @@ ItemCreator::ItemCreator(
       item_parameter_table(item_parameter_table),
       pt(&this->common_item_set->get_table(
           this->episode, this->mode, this->difficulty, this->section_id)),
-      rt(&this->rare_item_set->get_table(
-          this->episode, this->mode, this->difficulty, this->section_id)),
       restrictions(restrictions),
       random_crypt(random_seed) {
   print_data(stderr, this->pt, sizeof(*this->pt));
@@ -232,13 +230,17 @@ ItemData ItemCreator::check_rare_specs_and_create_rare_box_item(
     return item;
   }
 
-  for (size_t z = 0; z < this->rt->box_count; z++) {
-    if (area_norm + 1 == this->rt->box_areas[z]) {
-      item = this->check_rate_and_create_rare_item(this->rt->box_rares[z]);
-      if (!item.empty()) {
-        break;
-      }
+  auto rare_specs = this->rare_item_set->get_box_specs(
+      this->mode, this->episode, this->difficulty, this->section_id, area_norm + 1);
+  for (const auto& spec : rare_specs) {
+    item = this->check_rate_and_create_rare_item(spec);
+    if (!item.empty()) {
+      this->log.info("Box spec %08" PRIX32 " produced item %02hhX%02hhX%02hhX",
+          spec.probability, spec.item_code[0], spec.item_code[1], spec.item_code[2]);
+      break;
     }
+    this->log.info("Box spec %08" PRIX32 " did not produce item %02hhX%02hhX%02hhX",
+        spec.probability, spec.item_code[0], spec.item_code[1], spec.item_code[2]);
   }
   return item;
 }
@@ -275,24 +277,38 @@ bool ItemCreator::should_allow_meseta_drops() const {
 
 ItemData ItemCreator::check_rare_spec_and_create_rare_enemy_item(
     uint32_t enemy_type) {
+  ItemData item;
   if (this->are_rare_drops_allowed() &&
       (enemy_type > 0) && (enemy_type < 0x58)) {
-    return this->check_rate_and_create_rare_item(
-        this->rt->monster_rares[enemy_type]);
-  } else {
-    return ItemData();
+    // Note: In the original implementation, enemies can only have one possible
+    // rare drop. In our implementation, they can have multiple rare drops if
+    // JSONRareItemSet is used (the other RareItemSet implementations never
+    // return multiple drops for an enemy type).
+    auto rare_specs = this->rare_item_set->get_enemy_specs(
+        this->mode, this->episode, this->difficulty, this->section_id, enemy_type);
+    for (const auto& spec : rare_specs) {
+      item = this->check_rate_and_create_rare_item(spec);
+      if (!item.empty()) {
+        this->log.info("Enemy spec %08" PRIX32 " produced item %02hhX%02hhX%02hhX",
+            spec.probability, spec.item_code[0], spec.item_code[1], spec.item_code[2]);
+        break;
+      }
+      this->log.info("Enemy spec %08" PRIX32 " did not produce item %02hhX%02hhX%02hhX",
+          spec.probability, spec.item_code[0], spec.item_code[1], spec.item_code[2]);
+    }
   }
+  return item;
 }
 
 ItemData ItemCreator::check_rate_and_create_rare_item(
-    const RareItemSet::Table::Drop& drop) {
+    const RareItemSet::ExpandedDrop& drop) {
   if (drop.probability == 0) {
     return ItemData();
   }
 
   // Note: The original code uses 0xFFFFFFFF as the maximum here. We use
   // 0x100000000 instead, which makes all rare items SLIGHTLY more rare.
-  if (this->rand_int(0x100000000) >= this->rare_item_set->expand_rate(drop.probability)) {
+  if (this->rand_int(0x100000000) >= drop.probability) {
     return ItemData();
   }
 
@@ -1649,4 +1665,46 @@ void ItemCreator::generate_weapon_shop_item_bonus2(
     item.data1[9] = bonus_values.at(max<size_t>(
         this->rand_int(range->max + 1), range->min));
   }
+}
+
+ItemData ItemCreator::on_specialized_box_item_drop(uint32_t def0, uint32_t def1, uint32_t def2) {
+  ItemData item;
+  item.data1[0] = (def0 >> 0x18) & 0x0F;
+  item.data1[1] = (def0 >> 0x10) + ((item.data1[0] == 0x00) || (item.data1[0] == 0x01));
+  item.data1[2] = def0 >> 8;
+
+  switch (item.data1[0]) {
+    case 0x00:
+      item.data1[3] = (def1 >> 0x18) & 0xFF;
+      item.data1[4] = def0 & 0xFF;
+      item.data1[6] = (def1 >> 8) & 0xFF;
+      item.data1[7] = def1 & 0xFF;
+      item.data1[8] = (def2 >> 0x18) & 0xFF;
+      item.data1[9] = (def2 >> 0x10) & 0xFF;
+      item.data1[10] = (def2 >> 8) & 0xFF;
+      item.data1[11] = def2 & 0xFF;
+      break;
+    case 0x01:
+      item.data1[3] = (def1 >> 0x18) & 0xFF;
+      item.data1[4] = (def1 >> 0x10) & 0xFF;
+      item.data1[5] = def0 & 0xFF;
+      break;
+    case 0x02:
+      item.assign_mag_stats(ItemMagStats());
+      break;
+    case 0x03:
+      if (item.data1[1] == 0x02) {
+        item.data1[4] = def0 & 0xFF;
+      }
+      item.set_tool_item_amount(1);
+      break;
+    case 0x04:
+      item.data2d = ((def1 >> 0x10) & 0xFFFF) * 10;
+      break;
+
+    default:
+      throw runtime_error("invalid item class");
+  }
+
+  return item;
 }

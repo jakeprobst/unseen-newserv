@@ -8,84 +8,59 @@
 #include <string>
 #include <vector>
 
+#include "BattleParamsIndex.hh"
 #include "PSOEncryption.hh"
 #include "StaticGameData.hh"
 #include "Text.hh"
 
-class BattleParamsIndex {
-public:
-  struct Entry {
-    le_uint16_t atp; // attack power
-    le_uint16_t psv; // perseverance (intelligence?)
-    le_uint16_t evp; // evasion
-    le_uint16_t hp; // hit points
-    le_uint16_t dfp; // defense
-    le_uint16_t ata; // accuracy
-    le_uint16_t lck; // luck
-    le_uint16_t esp; // ???
-    parray<uint8_t, 0x0C> unknown_a1;
-    le_uint32_t experience;
-    le_uint32_t difficulty;
+struct Map {
+  struct RareEnemyRates {
+    uint32_t hildeblue; // HILDEBEAR -> HILDEBLUE
+    uint32_t rappy; // RAG_RAPPY -> {AL_RAPPY or seasonal rappies}; SAND_RAPPY -> DEL_RAPPY
+    uint32_t nar_lily; // POISON_LILY -> NAR_LILY
+    uint32_t pouilly_slime; // POFUILLY_SLIME -> POUILLY_SLIME
+    uint32_t merissa_aa; // MERISSA_A -> MERISSA_AA
+    uint32_t pazuzu; // ZU -> PAZUZU (and _ALT variants)
+    uint32_t dorphon_eclair; // DORPHON -> DORPHON_ECLAIR
+    uint32_t kondrieu; // {SAINT_MILLION, SHAMBERTIN} -> KONDRIEU
+  };
+
+  struct Enemy {
+    enum Flag {
+      HIT_BY_PLAYER0 = 0x01,
+      HIT_BY_PLAYER1 = 0x02,
+      HIT_BY_PLAYER2 = 0x04,
+      HIT_BY_PLAYER3 = 0x08,
+      DEFEATED = 0x10,
+      ITEM_DROPPED = 0x20,
+    };
+    EnemyType type;
+    uint8_t flags;
+    uint8_t last_hit_by_client_id;
+
+    explicit Enemy(EnemyType type);
 
     std::string str() const;
   } __attribute__((packed));
 
-  struct Table {
-    parray<parray<Entry, 0x60>, 4> difficulty;
+  std::vector<Enemy> enemies;
+  std::vector<size_t> rare_enemy_indexes;
 
-    void print(FILE* stream) const;
-  } __attribute__((packed));
-
-  BattleParamsIndex(
-      std::shared_ptr<const std::string> data_on_ep1, // BattleParamEntry_on.dat
-      std::shared_ptr<const std::string> data_on_ep2, // BattleParamEntry_lab_on.dat
-      std::shared_ptr<const std::string> data_on_ep4, // BattleParamEntry_ep4_on.dat
-      std::shared_ptr<const std::string> data_off_ep1, // BattleParamEntry.dat
-      std::shared_ptr<const std::string> data_off_ep2, // BattleParamEntry_lab.dat
-      std::shared_ptr<const std::string> data_off_ep4); // BattleParamEntry_ep4.dat
-
-  const Entry& get(bool solo, Episode episode, uint8_t difficulty,
-      uint8_t monster_type) const;
-
-private:
-  struct LoadedFile {
-    std::shared_ptr<const std::string> data;
-    const Table* table;
-  };
-
-  // online/offline, episode
-  LoadedFile files[2][3];
+  void clear();
+  void add_enemies_from_map_data(
+      Episode episode,
+      uint8_t difficulty,
+      uint8_t event,
+      const void* data,
+      size_t size,
+      const RareEnemyRates* rare_rates = nullptr);
+  void add_enemies_from_quest_data(
+      Episode episode,
+      uint8_t difficulty,
+      uint8_t event,
+      const void* data,
+      size_t size);
 };
-
-struct PSOEnemy {
-  uint64_t id;
-  uint16_t source_type;
-  uint8_t hit_flags;
-  uint8_t last_hit;
-  uint32_t experience;
-  uint32_t rt_index;
-  size_t num_clones;
-  const char* type_name;
-
-  explicit PSOEnemy(uint64_t id);
-  PSOEnemy(
-      uint64_t id,
-      uint16_t source_type,
-      uint32_t experience,
-      uint32_t rt_index,
-      size_t num_clones,
-      const char* type_name);
-
-  std::string str() const;
-} __attribute__((packed));
-
-std::vector<PSOEnemy> parse_map(
-    std::shared_ptr<const BattleParamsIndex> battle_params,
-    bool is_solo,
-    Episode episode,
-    uint8_t difficulty,
-    std::shared_ptr<const std::string> data,
-    bool alt_enemies);
 
 // TODO: This class is currently unused. It would be nice if we could use this
 // to generate variations and link to the corresponding map filenames, but it

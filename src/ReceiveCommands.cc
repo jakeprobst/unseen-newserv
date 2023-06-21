@@ -12,6 +12,7 @@
 #include <phosg/Time.hh>
 
 #include "ChatCommands.hh"
+#include "Compression.hh"
 #include "Episode3/Tournament.hh"
 #include "FileContentsCache.hh"
 #include "ItemCreator.hh"
@@ -391,8 +392,7 @@ static void on_88_DCNTE(shared_ptr<ServerState> s, shared_ptr<Client> c,
 
 static void on_8B_DCNTE(shared_ptr<ServerState> s, shared_ptr<Client> c,
     uint16_t, uint32_t, const string& data) {
-  const auto& cmd = check_size_t<C_Login_DCNTE_8B>(data,
-      sizeof(C_Login_DCNTE_8B), sizeof(C_LoginExtended_DCNTE_8B));
+  const auto& cmd = check_size_t<C_Login_DCNTE_8B>(data, sizeof(C_LoginExtended_DCNTE_8B));
   c->channel.version = GameVersion::DC;
   c->flags |= flags_for_version(c->version(), -1);
   c->flags |= Client::Flag::IS_DC_V1 | Client::Flag::IS_TRIAL_EDITION;
@@ -436,7 +436,7 @@ static void on_8B_DCNTE(shared_ptr<ServerState> s, shared_ptr<Client> c,
 
 static void on_90_DC(shared_ptr<ServerState> s, shared_ptr<Client> c,
     uint16_t, uint32_t, const string& data) {
-  const auto& cmd = check_size_t<C_LoginV1_DC_PC_V3_90>(data, sizeof(C_LoginV1_DC_PC_V3_90), 0xFFFF);
+  const auto& cmd = check_size_t<C_LoginV1_DC_PC_V3_90>(data, 0xFFFF);
   c->channel.version = GameVersion::DC;
   c->flags |= flags_for_version(c->version(), -1);
   c->flags |= Client::Flag::IS_DC_V1;
@@ -478,8 +478,7 @@ static void on_92_DC(shared_ptr<ServerState>, shared_ptr<Client> c,
 
 static void on_93_DC(shared_ptr<ServerState> s, shared_ptr<Client> c,
     uint16_t, uint32_t, const string& data) {
-  const auto& cmd = check_size_t<C_LoginV1_DC_93>(data,
-      sizeof(C_LoginV1_DC_93), sizeof(C_LoginExtendedV1_DC_93));
+  const auto& cmd = check_size_t<C_LoginV1_DC_93>(data, sizeof(C_LoginExtendedV1_DC_93));
   set_console_client_flags(c, cmd.sub_version);
 
   uint32_t serial_number = stoul(cmd.serial_number, nullptr, 16);
@@ -650,8 +649,7 @@ static void on_9D_9E(shared_ptr<ServerState> s, shared_ptr<Client> c,
     uint16_t command, uint32_t, const string& data) {
   const C_Login_DC_PC_GC_9D* base_cmd;
   if (command == 0x9D) {
-    base_cmd = &check_size_t<C_Login_DC_PC_GC_9D>(data,
-        sizeof(C_Login_DC_PC_GC_9D), sizeof(C_LoginExtended_PC_9D));
+    base_cmd = &check_size_t<C_Login_DC_PC_GC_9D>(data, sizeof(C_LoginExtended_PC_9D));
     if (base_cmd->is_extended) {
       if (c->version() == GameVersion::PC) {
         const auto& cmd = check_size_t<C_LoginExtended_PC_9D>(data);
@@ -669,8 +667,7 @@ static void on_9D_9E(shared_ptr<ServerState> s, shared_ptr<Client> c,
   } else if (command == 0x9E) {
     // GC and XB send different amounts of data in this command. This is how
     // newserv determines if a V3 client is GC or XB.
-    const auto& cmd = check_size_t<C_Login_GC_9E>(data,
-        sizeof(C_Login_GC_9E), sizeof(C_LoginExtended_XB_9E));
+    const auto& cmd = check_size_t<C_Login_GC_9E>(data, sizeof(C_LoginExtended_XB_9E));
     switch (data.size()) {
       case sizeof(C_Login_GC_9E):
       case sizeof(C_LoginExtended_GC_9E):
@@ -1310,8 +1307,7 @@ static void on_CA_Ep3(shared_ptr<ServerState> s, shared_ptr<Client> c,
     throw runtime_error("Episode 3 server data request sent outside of Episode 3 game");
   }
 
-  const auto& header = check_size_t<G_CardServerDataCommandHeader>(
-      data, sizeof(G_CardServerDataCommandHeader), 0xFFFF);
+  const auto& header = check_size_t<G_CardServerDataCommandHeader>(data, 0xFFFF);
   if (header.subcommand != 0xB3) {
     throw runtime_error("unknown Episode 3 server data request");
   }
@@ -1978,6 +1974,7 @@ static void on_10(shared_ptr<ServerState> s, shared_ptr<Client> c,
           l->flags |= Lobby::Flag::QUEST_IN_PROGRESS;
         }
         l->quest = q;
+        l->episode = q->episode;
         for (size_t x = 0; x < l->max_clients; x++) {
           if (!l->clients[x]) {
             continue;
@@ -2336,41 +2333,43 @@ static void on_AC_V3_BB(shared_ptr<ServerState> s, shared_ptr<Client> c,
     uint16_t, uint32_t, const string& data) {
   check_size_v(data.size(), 0);
 
-  // If this client is NOT loading, they should not send an AC. Sending an AC to
-  // a client that isn't waiting to start a quest will crash the client, so we
-  // have to be careful not to do so.
-  if (!(c->flags & Client::Flag::LOADING_QUEST)) {
-    return;
-  }
-  c->flags &= ~Client::Flag::LOADING_QUEST;
-
   auto l = s->find_lobby(c->lobby_id);
-  if (!l->quest.get()) {
-    return;
-  }
 
-  if (send_quest_barrier_if_all_clients_ready(l) &&
-      (l->version == GameVersion::BB)) {
-    // TODO: We should replace the game enemies list here. It'll look something
-    // like this (but the dat format may be different from the existing loader):
-    // try {
-    //   auto dat_data = prs_decompress(l->quest->dat_contents());
-    //   game->enemies = parse_map(
-    //       s->battle_params,
-    //       l->flags & Lobby::Flag::SOLO_MODE,
-    //       l->episode,
-    //       l->difficulty,
-    //       dat_data,
-    //       false);
-    //   c->log.info("Replaced enemies list with quest layout (%zu entries)",
-    //       l->enemies.size());
-    //   for (size_t z = 0; z < l->enemies.size(); z++) {
-    //     string e_str = l->enemies[z].str();
-    //     l->log.info("(Entry %zX) %s", z, e_str.c_str());
-    //   }
-    // } catch (const exception& e) {
-    //   c->log.info("Failed to load quest layout: %s", e.what());
-    // }
+  if (c->flags & Client::Flag::LOADING_RUNNING_QUEST) {
+    c->flags &= ~Client::Flag::LOADING_RUNNING_QUEST;
+    if (l->version != GameVersion::BB) {
+      throw logic_error("joinable quest started on non-BB version");
+    }
+
+    auto leader_c = l->clients.at(l->leader_id);
+    if (!leader_c) {
+      throw logic_error("lobby leader is missing");
+    }
+
+    send_command(c, 0xAC, 0x00);
+    send_command(leader_c, 0xDD, c->lobby_client_id);
+
+  } else if (c->flags & Client::Flag::LOADING_QUEST) {
+    c->flags &= ~Client::Flag::LOADING_QUEST;
+
+    if (!l->quest.get()) {
+      return;
+    }
+
+    if (send_quest_barrier_if_all_clients_ready(l) &&
+        (l->version == GameVersion::BB) &&
+        l->map &&
+        l->quest) {
+      auto dat_contents = prs_decompress(*l->quest->dat_contents());
+      l->map->clear();
+      l->map->add_enemies_from_quest_data(l->episode, l->difficulty, l->event, dat_contents.data(), dat_contents.size());
+      c->log.info("Replaced enemies list with quest layout (%zu entries)",
+          l->map->enemies.size());
+      for (size_t z = 0; z < l->map->enemies.size(); z++) {
+        string e_str = l->map->enemies[z].str();
+        l->log.info("(Entry %zX) %s", z, e_str.c_str());
+      }
+    }
   }
 }
 
@@ -2448,8 +2447,7 @@ static void on_61_98(shared_ptr<ServerState> s, shared_ptr<Client> c,
   switch (c->version()) {
     case GameVersion::DC:
     case GameVersion::PC: {
-      const auto& pd = check_size_t<PSOPlayerDataDCPC>(data,
-          sizeof(PSOPlayerDataDCPC), 0xFFFF);
+      const auto& pd = check_size_t<PSOPlayerDataDCPC>(data, 0xFFFF);
       c->game_data.import_player(pd);
       break;
     }
@@ -2464,14 +2462,14 @@ static void on_61_98(shared_ptr<ServerState> s, shared_ptr<Client> c,
         c->game_data.ep3_config.reset(new Episode3::PlayerConfig(pd3->ep3_config));
         pd = reinterpret_cast<const PSOPlayerDataV3*>(pd3);
       } else {
-        pd = &check_size_t<PSOPlayerDataV3>(data, sizeof(PSOPlayerDataV3),
+        pd = &check_size_t<PSOPlayerDataV3>(data,
             sizeof(PSOPlayerDataV3) + c->game_data.player()->auto_reply.bytes());
       }
-      c->game_data.import_player(*pd);
+      c->game_data.import_player(*pd, c->version() == GameVersion::GC);
       break;
     }
     case GameVersion::BB: {
-      const auto& pd = check_size_t<PSOPlayerDataBB>(data, sizeof(PSOPlayerDataBB),
+      const auto& pd = check_size_t<PSOPlayerDataBB>(data,
           sizeof(PSOPlayerDataBB) + c->game_data.player()->auto_reply.bytes());
       c->game_data.import_player(pd);
       break;
@@ -2539,7 +2537,7 @@ static void on_6x_C9_CB(shared_ptr<ServerState> s, shared_ptr<Client> c,
     return;
   }
 
-  on_subcommand(s, l, c, command, flag, data);
+  on_subcommand_multi(s, l, c, command, flag, data);
 }
 
 static void on_chat_generic(shared_ptr<ServerState> s, shared_ptr<Client> c,
@@ -2599,7 +2597,7 @@ static void on_chat_generic(shared_ptr<ServerState> s, shared_ptr<Client> c,
 
 static void on_06_PC_BB(shared_ptr<ServerState> s, shared_ptr<Client> c,
     uint16_t, uint32_t, const string& data) {
-  const auto& cmd = check_size_t<C_Chat_06>(data, sizeof(C_Chat_06), 0xFFFF);
+  const auto& cmd = check_size_t<C_Chat_06>(data, 0xFFFF);
   u16string text(cmd.text.pcbb, (data.size() - sizeof(C_Chat_06)) / sizeof(char16_t));
   strip_trailing_zeroes(text);
   on_chat_generic(s, c, text);
@@ -2607,7 +2605,7 @@ static void on_06_PC_BB(shared_ptr<ServerState> s, shared_ptr<Client> c,
 
 static void on_06_DC_V3(shared_ptr<ServerState> s, shared_ptr<Client> c,
     uint16_t, uint32_t, const string& data) {
-  const auto& cmd = check_size_t<C_Chat_06>(data, sizeof(C_Chat_06), 0xFFFF);
+  const auto& cmd = check_size_t<C_Chat_06>(data, 0xFFFF);
   u16string decoded_s = decode_sjis(cmd.text.dcv3, data.size() - sizeof(C_Chat_06));
   on_chat_generic(s, c, decoded_s);
 }
@@ -3221,6 +3219,7 @@ shared_ptr<Lobby> create_game_generic(
     }
     game->next_game_item_id = 0x00810000;
 
+    game->map.reset(new Map());
     for (size_t area = 0; area < 0x10; area++) {
       c->log.info("[Map/%zu] Using variations %" PRIX32 ", %" PRIX32,
           area, game->variations[area * 2].load(), game->variations[area * 2 + 1].load());
@@ -3239,21 +3238,14 @@ shared_ptr<Lobby> create_game_generic(
       for (const string& filename : filenames) {
         try {
           auto map_data = s->load_bb_file(filename, "", "map/" + filename);
-          std::vector<PSOEnemy> area_enemies = parse_map(
-              s->battle_params,
-              is_solo,
-              game->episode,
-              game->difficulty,
-              map_data,
-              false);
-          game->enemies.insert(
-              game->enemies.end(),
-              area_enemies.begin(),
-              area_enemies.end());
+          size_t start_offset = game->map->enemies.size();
+          game->map->add_enemies_from_map_data(
+              game->episode, game->difficulty, game->event, map_data->data(), map_data->size());
+          size_t entries_loaded = game->map->enemies.size() - start_offset;
           c->log.info("[Map/%zu] Loaded %s (%zu entries)",
-              area, filename.c_str(), area_enemies.size());
-          for (size_t z = 0; z < area_enemies.size(); z++) {
-            string e_str = area_enemies[z].str();
+              area, filename.c_str(), entries_loaded);
+          for (size_t z = start_offset; z < game->map->enemies.size(); z++) {
+            string e_str = game->map->enemies[z].str();
             static_game_data_log.info("(Entry %zX) %s", z, e_str.c_str());
           }
           any_map_loaded = true;
@@ -3267,7 +3259,8 @@ shared_ptr<Lobby> create_game_generic(
       }
     }
 
-    c->log.info("Loaded maps contain %zu entries overall", game->enemies.size());
+    c->log.info("Loaded maps contain %zu entries overall (%zu as rares)",
+        game->map->enemies.size(), game->map->rare_enemy_indexes.size());
   }
   return game;
 }
@@ -3461,6 +3454,23 @@ static void on_6F(shared_ptr<ServerState> s, shared_ptr<Client> c,
   // unexpectedly (that is, only equipped items are included).
   if (c->version() == GameVersion::BB) {
     send_get_player_info(c);
+    if (l->flags & Lobby::Flag::JOINABLE_QUEST_IN_PROGRESS) {
+      if (!l->quest) {
+        throw runtime_error("JOINABLE_QUEST_IN_PROGRESS is set, but lobby has no quest");
+      }
+      string bin_basename = l->quest->bin_filename();
+      shared_ptr<const string> bin_contents = l->quest->bin_contents();
+      string dat_basename = l->quest->dat_filename();
+      shared_ptr<const string> dat_contents = l->quest->dat_contents();
+
+      send_open_quest_file(c, bin_basename + ".bin",
+          bin_basename, bin_contents, QuestFileType::ONLINE);
+      send_open_quest_file(c, dat_basename + ".dat",
+          dat_basename, dat_contents, QuestFileType::ONLINE);
+      c->flags |= Client::Flag::LOADING_RUNNING_QUEST;
+    } else if (l->map) {
+      send_rare_enemy_index_list(c, l->map->rare_enemy_indexes);
+    }
   }
 
   // Handle initial commands for spectator teams
@@ -3478,7 +3488,7 @@ static void on_6F(shared_ptr<ServerState> s, shared_ptr<Client> c,
 
 static void on_D0_V3_BB(shared_ptr<ServerState> s, shared_ptr<Client> c,
     uint16_t, uint32_t, const string& data) {
-  auto& cmd = check_size_t<SC_TradeItems_D0_D3>(data);
+  const auto& cmd = check_size_t<SC_TradeItems_D0_D3>(data);
 
   if (c->game_data.pending_item_trade) {
     throw runtime_error("player started a trade when one is already pending");
@@ -3499,7 +3509,10 @@ static void on_D0_V3_BB(shared_ptr<ServerState> s, shared_ptr<Client> c,
   c->game_data.pending_item_trade.reset(new PendingItemTrade());
   c->game_data.pending_item_trade->other_client_id = cmd.target_client_id;
   for (size_t x = 0; x < cmd.item_count; x++) {
-    c->game_data.pending_item_trade->items.emplace_back(cmd.items[x]);
+    auto& item = c->game_data.pending_item_trade->items.emplace_back(cmd.item_datas[x]);
+    if (c->version() == GameVersion::GC) {
+      item.bswap_data2_if_mag();
+    }
   }
 
   // If the other player has a pending trade as well, assume this is the second
@@ -4220,21 +4233,18 @@ void on_command_with_header(shared_ptr<ServerState> s, shared_ptr<Client> c,
     case GameVersion::DC:
     case GameVersion::GC:
     case GameVersion::XB: {
-      auto& header = check_size_t<PSOCommandHeaderDCV3>(data,
-          sizeof(PSOCommandHeaderDCV3), 0xFFFF);
+      auto& header = check_size_t<PSOCommandHeaderDCV3>(data, 0xFFFF);
       on_command(s, c, header.command, header.flag, data.substr(sizeof(header)));
       break;
     }
     case GameVersion::PC:
     case GameVersion::PATCH: {
-      auto& header = check_size_t<PSOCommandHeaderPC>(data,
-          sizeof(PSOCommandHeaderPC), 0xFFFF);
+      auto& header = check_size_t<PSOCommandHeaderPC>(data, 0xFFFF);
       on_command(s, c, header.command, header.flag, data.substr(sizeof(header)));
       break;
     }
     case GameVersion::BB: {
-      auto& header = check_size_t<PSOCommandHeaderBB>(data,
-          sizeof(PSOCommandHeaderBB), 0xFFFF);
+      auto& header = check_size_t<PSOCommandHeaderBB>(data, 0xFFFF);
       on_command(s, c, header.command, header.flag, data.substr(sizeof(header)));
       break;
     }
