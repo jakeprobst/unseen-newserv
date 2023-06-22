@@ -38,6 +38,23 @@ const LevelTable::LevelStats& LevelTable::stats_for_level(
   }
   return this->table->levels[char_class][level];
 }
+const PlayerStats LevelTable::stats_at_level(
+    uint8_t char_class, uint8_t level) const {
+  if (char_class >= 12) {
+    throw invalid_argument("invalid character class");
+  }
+  if (level >= 200) {
+    throw invalid_argument("invalid character level");
+  }
+
+  PlayerStats ps = this->base_stats_for_class(char_class);
+  for(int i = 0; i <= level; i++) {
+    this->table->levels[char_class][i].apply(ps);
+  }
+  return ps;
+}
+
+
 
 void LevelTable::LevelStats::apply(PlayerStats& ps) const {
   ps.ata += this->ata;
